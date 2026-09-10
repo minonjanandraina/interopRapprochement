@@ -83,7 +83,8 @@ def lancer_rapprochement(date_cible, user):
             nb_success += 1
         elif mvola:
             # Orpheline MVOLA : soit une ligne PAMF existe mais en echec (is_success=False,
-            # rollback recommande cote MVOLA), soit aucune ligne PAMF (ticket Aspekt a creer).
+            # ticket Aspekt a creer, la requete a atteint Aspekt), soit aucune ligne PAMF
+            # (rollback recommande cote MVOLA, la requete n'a pas atteint Aspekt).
             # Cf. ResultatRapprochement.action_recommandee et CLAUDE.md.
             statut = ResultatRapprochement.Statut.ORPHELINE_MVOLA
             nb_orph_mvola += 1

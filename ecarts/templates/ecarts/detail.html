@@ -25,31 +25,32 @@
     <a href="{% url 'ecarts:mvola_liste' %}" class="btn btn-outline-secondary btn-sm">Retour a la liste</a>
 </div>
 
-{% if ecart.action_recommandee == 'ROLLBACK_MVOLA' %}
-<div class="card p-3 mb-4 border-danger">
-    <h3 class="h6">Action recommandee : <span class="badge text-bg-danger">{{ ecart.action_recommandee.label }}</span></h3>
-    <p class="text-muted-debian small">
-        Une ligne PAMF existe pour cette transaction mais en echec (non postee cote banque).
-        Le wallet MVOLA doit etre credite en retour (rollback), a effectuer hors de cette application,
-        puis confirme ci-dessous.
-    </p>
-    <form method="post" action="{% url 'ecarts:confirmer_rollback' ecart.pk %}" class="row g-2 align-items-end">
-        {% csrf_token %}
-        <div class="col-md-8">{{ rollback_form.reference }}</div>
-        <div class="col-md-4"><button type="submit" class="btn btn-debian btn-sm">Confirmer le rollback effectue</button></div>
-    </form>
-</div>
-{% elif ecart.action_recommandee == 'TICKET_ASPEKT' %}
+{% if ecart.action_recommandee == 'TICKET_ASPEKT' %}
 <div class="card p-3 mb-4 border-warning">
     <h3 class="h6">Action recommandee : <span class="badge text-bg-warning">{{ ecart.action_recommandee.label }}</span></h3>
     <p class="text-muted-debian small">
-        Aucune ligne PAMF trouvee pour cette transaction. Creer un ticket Aspekt (hors de cette
+        Une ligne PAMF existe pour cette transaction mais en echec : la requete a bien atteint
+        Aspekt/CBS, qui peut donc corriger le traitement. Creer un ticket Aspekt (hors de cette
         application) pour investigation/regularisation, puis enregistrer sa reference ci-dessous.
     </p>
     <form method="post" action="{% url 'ecarts:enregistrer_ticket_aspekt' ecart.pk %}" class="row g-2 align-items-end">
         {% csrf_token %}
         <div class="col-md-8">{{ ticket_aspekt_form.reference }}</div>
         <div class="col-md-4"><button type="submit" class="btn btn-debian btn-sm">Enregistrer le ticket</button></div>
+    </form>
+</div>
+{% elif ecart.action_recommandee == 'ROLLBACK_MVOLA' %}
+<div class="card p-3 mb-4 border-danger">
+    <h3 class="h6">Action recommandee : <span class="badge text-bg-danger">{{ ecart.action_recommandee.label }}</span></h3>
+    <p class="text-muted-debian small">
+        Aucune ligne PAMF trouvee pour cette transaction : la requete n'a meme pas atteint
+        Aspekt, qui n'a donc rien a corriger de son cote. Le wallet MVOLA doit etre credite en
+        retour (rollback), a effectuer hors de cette application, puis confirme ci-dessous.
+    </p>
+    <form method="post" action="{% url 'ecarts:confirmer_rollback' ecart.pk %}" class="row g-2 align-items-end">
+        {% csrf_token %}
+        <div class="col-md-8">{{ rollback_form.reference }}</div>
+        <div class="col-md-4"><button type="submit" class="btn btn-debian btn-sm">Confirmer le rollback effectue</button></div>
     </form>
 </div>
 {% endif %}

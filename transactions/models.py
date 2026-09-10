@@ -177,11 +177,13 @@ class ResultatRapprochement(models.Model):
     def action_recommandee(self):
         """Action recommandee pour une orpheline MVOLA, cf. CLAUDE.md :
 
-        - une ligne PAMF existe mais en echec (is_success=False) -> rollback recommande cote MVOLA
-        - aucune ligne PAMF -> creation d'un ticket Aspekt pour regularisation
+        - une ligne PAMF existe mais en echec (is_success=False) -> la requete a bien atteint
+          Aspekt/CBS mais son traitement a echoue -> Aspekt peut corriger -> ticket Aspekt
+        - aucune ligne PAMF -> la requete n'a meme pas atteint Aspekt -> rien a corriger de son
+          cote -> rollback recommande cote MVOLA (credit retour du wallet)
         """
         if self.statut != self.Statut.ORPHELINE_MVOLA:
             return None
         if self.transaction_pamf is not None and not self.transaction_pamf.is_success:
-            return self.ActionRecommandee.ROLLBACK_MVOLA
-        return self.ActionRecommandee.TICKET_ASPEKT
+            return self.ActionRecommandee.TICKET_ASPEKT
+        return self.ActionRecommandee.ROLLBACK_MVOLA

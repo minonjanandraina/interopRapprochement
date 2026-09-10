@@ -198,8 +198,9 @@ class LancerRapprochementTests(TestCase):
         self.assertTrue(Ecart.objects.filter(transid_mvola='999').exists())
 
     @patch('transactions.services_pamf.fetch_transactions_pamf')
-    def test_ligne_pamf_en_echec_est_orpheline_mvola_avec_action_rollback(self, mock_fetch):
-        """cf. nouvelle requete CBS : is_sucess=0 -> pas un vrai SUCCESS, rollback MVOLA recommande."""
+    def test_ligne_pamf_en_echec_est_orpheline_mvola_avec_action_ticket_aspekt(self, mock_fetch):
+        """cf. nouvelle requete CBS : is_sucess=0 -> pas un vrai SUCCESS ; la requete a atteint
+        Aspekt (une ligne PAMF existe) donc Aspekt peut corriger -> ticket recommande."""
         fichier = make_csv('2026-09-07_reporting_PAMF.csv', [make_row(transid='111'), make_row(transid='222')])
         importer_fichier_mvola(fichier, self.user)
         mock_fetch.return_value = [
@@ -221,15 +222,16 @@ class LancerRapprochementTests(TestCase):
         resultat_222 = rapprochement.resultats.get(transid_mvola='222')
         self.assertEqual(resultat_222.statut, ResultatRapprochement.Statut.ORPHELINE_MVOLA)
         self.assertFalse(resultat_222.transaction_pamf.is_success)
-        self.assertEqual(resultat_222.action_recommandee, ResultatRapprochement.ActionRecommandee.ROLLBACK_MVOLA)
+        self.assertEqual(resultat_222.action_recommandee, ResultatRapprochement.ActionRecommandee.TICKET_ASPEKT)
 
-    def test_action_recommandee_ticket_aspekt_si_aucune_ligne_pamf(self):
+    def test_action_recommandee_rollback_si_aucune_ligne_pamf(self):
+        """Aucune ligne PAMF -> la requete n'a pas atteint Aspekt -> rien a corriger la-bas -> rollback MVOLA."""
         rapprochement = Rapprochement.objects.create(date=self.date_cible)
         resultat = ResultatRapprochement.objects.create(
             rapprochement=rapprochement, transid_mvola='333',
             statut=ResultatRapprochement.Statut.ORPHELINE_MVOLA, transaction_pamf=None,
         )
-        self.assertEqual(resultat.action_recommandee, ResultatRapprochement.ActionRecommandee.TICKET_ASPEKT)
+        self.assertEqual(resultat.action_recommandee, ResultatRapprochement.ActionRecommandee.ROLLBACK_MVOLA)
 
     @patch('transactions.services_pamf.fetch_transactions_pamf')
     def test_echec_cbs_marque_le_rapprochement_en_echec(self, mock_fetch):
