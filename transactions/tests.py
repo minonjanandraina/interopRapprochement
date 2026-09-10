@@ -3,7 +3,9 @@ from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 
 from .csv_mvola import FichierMvolaInvalide, importer_fichier_mvola
 from .models import (
@@ -225,3 +227,39 @@ class LancerRapprochementTests(TestCase):
         self.assertEqual(ecart.statut, Ecart.Statut.REGULARISE)
         self.assertEqual(rapprochement.resultats.get(transid_mvola='222').pk, resultat_pk)
         self.assertEqual(Ecart.objects.filter(transid_mvola='222').count(), 1)
+
+
+class LancerRapprochementPerformanceTests(TestCase):
+    """Le matching doit rester en nombre de requetes borne, pas O(n) sur le volume du jour."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='op', email='op@example.com', password='x')
+        self.date_cible = date(2026, 9, 7)
+
+    def _nb_requetes_pour_une_relance(self, nb_transactions):
+        rows = [make_row(transid=f'T{i}') for i in range(nb_transactions)]
+        fichier = make_csv('2026-09-07_reporting_PAMF.csv', rows)
+        importer_fichier_mvola(fichier, self.user)
+
+        with patch('transactions.services_pamf.fetch_transactions_pamf') as mock_fetch:
+            mock_fetch.return_value = [
+                {'rAutotransactionID': i, 'postingDate': self.date_cible, 'Time': '00:00:00',
+                 'Note': '', 'TRANSID_MVOLA': f'T{i}', 'responseBody': ''}
+                for i in range(nb_transactions)
+            ]
+            lancer_rapprochement(self.date_cible, self.user)
+            with CaptureQueriesContext(connection) as ctx:
+                lancer_rapprochement(self.date_cible, self.user)
+
+        Rapprochement.objects.all().delete()
+        TransactionMvola.objects.all().delete()
+        TransactionPamf.objects.all().delete()
+        ImportFichierMvola.objects.all().delete()
+        ImportRequetePamf.objects.all().delete()
+        return len(ctx.captured_queries)
+
+    def test_nombre_de_requetes_ne_scale_pas_avec_le_volume(self):
+        nb_requetes_10 = self._nb_requetes_pour_une_relance(10)
+        nb_requetes_100 = self._nb_requetes_pour_une_relance(100)
+
+        self.assertLess(nb_requetes_100, nb_requetes_10 + 10)
