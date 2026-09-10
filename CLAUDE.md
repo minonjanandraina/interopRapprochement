@@ -124,37 +124,46 @@ _Aucun point ouvert pour le moment._
 - **Déclenchement de la réconciliation.** Processus lancé manuellement par l'utilisateur, **par date** :
   1. L'utilisateur choisit une date et lance la réconciliation.
   2. Le système vérifie que le CSV MVOLA de cette date a déjà été importé manuellement (cf. décision d'import ci-dessus).
-  3. Si oui → interrogation de la base CBS (requête PAMF) pour cette même date.
+  3. Si oui → interrogation de la base CBS (requête PAMF) pour cette même date. **Il n'existe pas d'écran d'import PAMF manuel séparé** : l'appel pyodbc/CBS est uniquement déclenché automatiquement à cette étape.
   4. Rapprochement des deux jeux de données (clé `TRANSID_MVOLA`) et **insertion en table locale** du résultat, avec un statut par transaction :
      - `ORPHELINE_MVOLA` — présente côté MVOLA, absente côté PAMF
      - `ORPHELINE_PAMF` — présente côté PAMF, absente côté MVOLA
      - `SUCCESS` — présente des deux côtés (rapprochée)
+  - Implémenté par `Rapprochement` (un enregistrement par date) + `ResultatRapprochement` (un enregistrement par `TRANSID_MVOLA`), app `transactions`.
+- **Relance d'un rapprochement : idempotente et non destructive.** Relancer le rapprochement d'une date déjà traitée met à jour `Rapprochement`/`ResultatRapprochement` en place (`update_or_create` par `TRANSID_MVOLA`, pas de duplication) et ne recrée pas les `Ecart` déjà générés : un écart déjà en cours de traitement ou régularisé conserve son statut même si la date est re-rapprochée.
+  - ⚠️ Point de vigilance perf : le matching se fait transaction par transaction en synchrone dans la requête HTTP (plusieurs centaines de lignes/jour). Acceptable pour un déclenchement manuel aujourd'hui ; à revoir en tâche de fond (Sprint 5, Django-Q/Celery) si les volumes augmentent.
+- **Génération des écarts.** A la fin de chaque rapprochement, un `Ecart` (app `ecarts`) est automatiquement créé pour chaque `ResultatRapprochement` de statut `ORPHELINE_MVOLA` ou `ORPHELINE_PAMF` (statut de suivi initial `DETECTE`). Aucun `Ecart` n'est créé pour les lignes `SUCCESS`.
+- **Organisation de l'interface : sidebar par service.** La navigation principale est une sidebar listant les services de rapprochement : `MVOLA` (actif aujourd'hui), avec `Orange Money` et `Airtel Money` déjà présents en placeholder "bientôt disponible" pour anticiper leur ajout futur. L'écran d'un service est organisé en onglets : `Import <service>` et `Lancement rapprochement`. Ce dernier affiche la liste des rapprochements (un par date, avec les compteurs MVOLA / PAMF / rapprochées / orphelines) et un bouton "Détails" qui ouvre un modal Bootstrap chargé via HTMX, avec 3 sous-onglets paginés (HTMX) : transactions MVOLA, transactions PAMF, orphelines.
 
 ## Sprints de développement
 
-### Sprint 0 — Socle projet
-- Init dépôt git, structure projet Django (apps : `transactions`, `ecarts`, `core`, `user`)
-- Config settings dev (SQLite) / prod (PostgreSQL), variables d'environnement (`.env`, secrets CBS + SMTP)
-- Auth Django (module `user` : inscription + validation par email via envoi SMTP `mail.pamf.mg`, cf. section "Serveur mail"), design de base (palette/typo Debian 13, Bootstrap)
+### Sprint 0 — Socle projet ✅ terminé
+- [x] Init dépôt git, structure projet Django (apps : `transactions`, `ecarts`, `core`, `user`)
+- [x] Config settings dev (SQLite) / prod (PostgreSQL), variables d'environnement (`.env`, secrets CBS + SMTP)
+- [x] Auth Django (module `user` : inscription + validation par email via envoi SMTP `mail.pamf.mg`, cf. section "Serveur mail"), design de base (palette/typo Debian 13, Bootstrap)
 
-### Sprint 1 — Ingestion des données
-- Formulaire web d'upload du CSV MVOLA (`YYYY-MM-DD_reporting_PAMF.csv`, dépôt manuel par l'utilisateur) → parsing et insertion dans le modèle `TransactionMvola`
-- Validation du fichier à l'upload (nom/date, format des colonnes, doublons)
-- Connexion pyodbc à la base CBS et requête PAMF → modèle `TransactionPamf`
+### Sprint 1 — Ingestion des données ✅ terminé
+- [x] Formulaire web d'upload du CSV MVOLA (`YYYY-MM-DD_reporting_PAMF.csv`, dépôt manuel par l'utilisateur) → parsing et insertion dans le modèle `TransactionMvola`, historique tracé (`ImportFichierMvola`)
+- [x] Validation du fichier à l'upload (nom/date, en-tête, format des colonnes, doublons intra-fichier et inter-imports)
+- [x] Connexion pyodbc à la base CBS et requête PAMF → modèle `TransactionPamf` (fonction `transactions.services_pamf.importer_transactions_pamf`, historique tracé `ImportRequetePamf`). Pas d'écran dédié : appelée automatiquement au lancement du rapprochement (cf. Sprint 2 et Décisions prises)
 
-### Sprint 2 — Moteur de rapprochement
-- Écran/action "Lancer la réconciliation" par date : vérifie que le CSV MVOLA de la date a déjà été importé (sinon bloque avec message), puis déclenche la requête CBS pour cette date
-- Logique de matching sur `TRANSID_MVOLA` entre `TransactionMvola` et `TransactionPamf`
-- Insertion du résultat en table locale avec statut par transaction : `ORPHELINE_MVOLA` (présente MVOLA, absente PAMF), `ORPHELINE_PAMF` (présente PAMF, absente MVOLA), `SUCCESS` (présente des deux côtés)
-- Modèle `Ecart` généré à partir des lignes `ORPHELINE_*`, avec statut de suivi (détecté / en cours / régularisé)
+### Sprint 2 — Moteur de rapprochement ✅ largement fait (reste : UI de traitement des écarts, cf. Sprint 4)
+- [x] Onglet "Lancement rapprochement" par date (écran MVOLA) : vérifie que le CSV MVOLA de la date a déjà été importé (sinon bloque avec message), puis déclenche automatiquement la requête CBS pour cette date
+- [x] Logique de matching sur `TRANSID_MVOLA` entre `TransactionMvola` et `TransactionPamf` (`transactions.services_rapprochement.lancer_rapprochement`)
+- [x] Insertion du résultat en table locale avec statut par transaction : `ORPHELINE_MVOLA`, `ORPHELINE_PAMF`, `SUCCESS` (modèles `Rapprochement` + `ResultatRapprochement`), relance idempotente (`update_or_create`)
+- [x] Modèle `Ecart` (app `ecarts`) généré automatiquement à partir des lignes `ORPHELINE_*`, avec statut de suivi (`DETECTE` / `EN_COURS` / `REGULARISE`) préservé lors d'une relance
+- [x] Liste des rapprochements par date + modal "Détails" (transactions MVOLA / PAMF / orphelines, paginé via HTMX) — couvre une partie de la consultation prévue au Sprint 3
+- Reste à faire : tests de montée en charge / passage en tâche de fond si besoin (cf. Décisions prises, point de vigilance perf)
 
 ### Sprint 3 — Consultation (listes)
+> Un aperçu paginé (MVOLA / PAMF / orphelines) existe déjà via le modal "Détails" de l'écran de rapprochement (Sprint 2), pattern de pagination HTMX déjà validé. Reste à construire les vues liste dédiées, navigables indépendamment d'un rapprochement, avec filtres/recherche :
 - Vue liste + filtres/recherche des transactions MVOLA
 - Vue liste + filtres/recherche des transactions PAMF
 - Vue liste des écarts (filtrage par statut, date, type)
 - Interactions HTMX (pagination, filtres partiels sans rechargement)
 
 ### Sprint 4 — Traitement des écarts & régularisation
+> Le modèle `Ecart` existe déjà (généré automatiquement au Sprint 2) ; ce sprint construit le workflow et l'UI de traitement par-dessus.
 - Détail d'un écart (transaction MVOLA vs PAMF côte à côte, `responseBody`)
 - Actions de traitement (marquer régularisé, commentaire, pièce jointe via `FileField`)
 - Historique/suivi des régularisations (qui, quand, quelle action)
