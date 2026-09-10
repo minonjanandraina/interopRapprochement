@@ -12,6 +12,12 @@
     <nav class="navbar navbar-expand navbar-debian">
         <div class="container app-shell py-2">
             <a class="navbar-brand" href="{% url 'core:home' %}">interopRapprochement</a>
+            {% if user.is_authenticated %}
+            <div class="ms-3 me-auto">
+                <a href="{% url 'transactions:import_mvola' %}" class="nav-link d-inline">Import MVOLA</a>
+                <a href="{% url 'transactions:import_pamf' %}" class="nav-link d-inline ms-3">Import PAMF</a>
+            </div>
+            {% endif %}
             <div class="ms-auto">
                 {% if user.is_authenticated %}
                     <span class="text-muted-debian me-3">{{ user }}</span>
