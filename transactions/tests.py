@@ -2,6 +2,7 @@ from datetime import date
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import connection
 from django.test import Client, TestCase
@@ -207,6 +208,82 @@ class LancerRapprochementTests(TestCase):
         self.assertEqual(rapprochement.statut, Rapprochement.Statut.ECHEC)
         self.assertIn('connexion refusee', rapprochement.message_erreur)
         self.assertEqual(rapprochement.resultats.count(), 0)
+
+
+class NotificationNouveauxEcartsTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='op', email='op@example.com', password='x', is_email_verified=True,
+        )
+        self.date_cible = date(2026, 9, 7)
+
+    @patch('transactions.services_pamf.fetch_transactions_pamf')
+    def test_notifie_les_utilisateurs_verifies_si_nouveaux_ecarts(self, mock_fetch):
+        fichier = make_csv('2026-09-07_reporting_PAMF.csv', [make_row(transid='222')])
+        importer_fichier_mvola(fichier, self.user)
+        mock_fetch.return_value = []
+
+        with self.captureOnCommitCallbacks(execute=True):
+            lancer_rapprochement(self.date_cible, self.user)
+
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn(self.user.email, mail.outbox[0].to)
+        self.assertIn('222', mail.outbox[0].body)
+
+    @patch('transactions.services_pamf.fetch_transactions_pamf')
+    def test_relance_sans_nouvel_ecart_ne_notifie_pas_a_nouveau(self, mock_fetch):
+        fichier = make_csv('2026-09-07_reporting_PAMF.csv', [make_row(transid='222')])
+        importer_fichier_mvola(fichier, self.user)
+        mock_fetch.return_value = []
+
+        with self.captureOnCommitCallbacks(execute=True):
+            lancer_rapprochement(self.date_cible, self.user)
+        with self.captureOnCommitCallbacks(execute=True):
+            lancer_rapprochement(self.date_cible, self.user)
+
+        self.assertEqual(len(mail.outbox), 1)
+
+    @patch('transactions.services_pamf.fetch_transactions_pamf')
+    def test_aucun_destinataire_verifie_alors_pas_denvoi(self, mock_fetch):
+        self.user.is_email_verified = False
+        self.user.save()
+        fichier = make_csv('2026-09-07_reporting_PAMF.csv', [make_row(transid='222')])
+        importer_fichier_mvola(fichier, self.user)
+        mock_fetch.return_value = []
+
+        with self.captureOnCommitCallbacks(execute=True):
+            lancer_rapprochement(self.date_cible, self.user)
+
+        self.assertEqual(len(mail.outbox), 0)
+
+    @patch('transactions.services_pamf.fetch_transactions_pamf')
+    def test_notifie_les_comptes_staff_meme_sans_email_verifie(self, mock_fetch):
+        admin = User.objects.create_user(
+            username='admin', email='admin@example.com', password='x',
+            is_staff=True, is_email_verified=False,
+        )
+        fichier = make_csv('2026-09-07_reporting_PAMF.csv', [make_row(transid='333')])
+        importer_fichier_mvola(fichier, admin)
+        mock_fetch.return_value = []
+
+        with self.captureOnCommitCallbacks(execute=True):
+            lancer_rapprochement(self.date_cible, admin)
+
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn('admin@example.com', mail.outbox[0].to)
+
+    @patch('ecarts.notifications.send_mail')
+    @patch('transactions.services_pamf.fetch_transactions_pamf')
+    def test_echec_envoi_ne_bloque_pas_le_rapprochement(self, mock_fetch, mock_send_mail):
+        mock_send_mail.side_effect = RuntimeError('smtp indisponible')
+        fichier = make_csv('2026-09-07_reporting_PAMF.csv', [make_row(transid='222')])
+        importer_fichier_mvola(fichier, self.user)
+        mock_fetch.return_value = []
+
+        with self.captureOnCommitCallbacks(execute=True):
+            rapprochement = lancer_rapprochement(self.date_cible, self.user)
+
+        self.assertEqual(rapprochement.statut, Rapprochement.Statut.TERMINE)
 
     @patch('transactions.services_pamf.fetch_transactions_pamf')
     def test_relance_preserve_le_statut_de_regularisation_existant(self, mock_fetch):

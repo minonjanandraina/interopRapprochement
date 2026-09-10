@@ -1,0 +1,9 @@
+Bonjour,
+
+Le rapprochement MVOLA / PAMF du {{ rapprochement.date }} a detecte {{ ecarts|length }} nouvel(le)s ecart(s) :
+{% for e in ecarts %}
+- {{ e.transid_mvola }} ({{ e.get_type_ecart_display }})
+{% endfor %}
+Consultez la liste complete des ecarts : {{ site_base_url }}{% url 'ecarts:mvola_liste' %}
+
+Ceci est une notification automatique, merci de ne pas y repondre.

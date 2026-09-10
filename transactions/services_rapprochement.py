@@ -39,6 +39,7 @@ def _generer_ecarts(rapprochement):
         for resultat in orphelines if resultat.pk not in deja_couverts
     ]
     Ecart.objects.bulk_create(a_creer, batch_size=200)
+    return a_creer
 
 
 @db_transaction.atomic
@@ -115,5 +116,9 @@ def lancer_rapprochement(date_cible, user):
     rapprochement.statut = Rapprochement.Statut.TERMINE
     rapprochement.save()
 
-    _generer_ecarts(rapprochement)
+    nouveaux_ecarts = _generer_ecarts(rapprochement)
+    if nouveaux_ecarts:
+        from ecarts.notifications import notifier_nouveaux_ecarts
+        db_transaction.on_commit(lambda: notifier_nouveaux_ecarts(rapprochement, nouveaux_ecarts))
+
     return rapprochement

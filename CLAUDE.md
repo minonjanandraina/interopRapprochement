@@ -134,6 +134,7 @@ _Aucun point ouvert pour le moment._
   - Matching implémenté en requêtes bulk (`bulk_create`/`bulk_update`, par lots de 200) plutôt qu'un aller-retour DB par transaction : le nombre de requêtes reste quasi constant (~17-18) de 10 à 300 transactions/jour, valide pour le volume actuel (quelques centaines/jour). A revoir seulement si le volume grimpe de plusieurs ordres de grandeur ou si la latence CBS elle-meme devient le goulot (passage en tache de fond, Sprint 5).
 - **Génération des écarts.** A la fin de chaque rapprochement, un `Ecart` (app `ecarts`) est automatiquement créé pour chaque `ResultatRapprochement` de statut `ORPHELINE_MVOLA` ou `ORPHELINE_PAMF` (statut de suivi initial `DETECTE`). Aucun `Ecart` n'est créé pour les lignes `SUCCESS`.
 - **Organisation de l'interface : sidebar par service.** La navigation principale est une sidebar listant les services de rapprochement : `MVOLA` (actif aujourd'hui), avec `Orange Money` et `Airtel Money` déjà présents en placeholder "bientôt disponible" pour anticiper leur ajout futur. L'écran d'un service est organisé en onglets : `Import <service>` et `Lancement rapprochement`. Ce dernier affiche la liste des rapprochements (un par date, avec les compteurs MVOLA / PAMF / rapprochées / orphelines) et un bouton "Détails" qui ouvre un modal Bootstrap chargé via HTMX, avec 3 sous-onglets paginés (HTMX) : transactions MVOLA, transactions PAMF, orphelines.
+- **Destinataires des notifications email.** Utilisateurs actifs (`is_active`) avec `is_email_verified=True` (inscription standard via le module `user`), **ou** `is_staff=True` (comptes admin/superuser créés hors du flux d'inscription, qui ne passent jamais par la validation email). Pas encore de préférences de notification par utilisateur ni de ciblage par rôle — à revoir au Sprint 6 quand les rôles dynamiques existeront.
 
 ## Sprints de développement
 
@@ -172,10 +173,13 @@ _Aucun point ouvert pour le moment._
 - [x] Validé sur un écart réel (orpheline MVOLA du 2026-09-07) : commentaire, changement de statut et pièce jointe enregistrés avec le bon auteur/horodatage
 - [x] Corrigé au passage (dette Sprint 1) : les tests qui uploadent un fichier (CSV MVOLA, pièce jointe) écrivaient réellement sous `media/` et polluaient l'environnement de dev au fil des exécutions. `TEST_RUNNER` (`config.test_runner.TempMediaTestRunner`) redirige `MEDIA_ROOT` vers un dossier temporaire pendant les tests.
 
-### Sprint 5 — Automatisation & planification
-- La réconciliation reste déclenchée manuellement par date (cf. Décisions prises) — pas de planification automatique de la requête CBS
-- Notifications (email, via le serveur mail `mail.pamf.mg`) en cas de nouvel écart (`ORPHELINE_*`) détecté après une réconciliation
-- Django-Q/Celery Beat éventuellement pour des tâches asynchrones (ex: réconciliation longue en tâche de fond) plutôt que pour la planification
+### Sprint 5 — Automatisation & planification ✅ terminé (notifications) / non fait (tâche de fond, jugé non nécessaire pour l'instant)
+- [x] La réconciliation reste déclenchée manuellement par date (cf. Décisions prises) — pas de planification automatique de la requête CBS (inchangé, aucun développement necessaire)
+- [x] Notifications email (`ecarts.notifications.notifier_nouveaux_ecarts`, via le serveur mail `mail.pamf.mg`) envoyées uniquement pour les **nouveaux** écarts (`ORPHELINE_*`) créés lors du rapprochement qui vient de s'exécuter — une relance qui ne détecte rien de neuf ne renvoie pas d'email
+  - Envoi différé à la validation de la transaction DB (`transaction.on_commit`), pour ne jamais notifier un rapprochement qui aurait échoué/été annulé
+  - Un échec SMTP est journalisé (`logger.exception`) mais ne fait jamais échouer le rapprochement
+  - Destinataires : utilisateurs actifs avec email vérifié (inscription standard), **ou** `is_staff`/superuser (comptes créés via `createsuperuser`, qui ne passent pas par l'activation email — bug réel trouvé et corrigé en testant sur les données de dev : le compte `admin` réel n'aurait sinon jamais été notifié)
+- Non fait, jugé non nécessaire pour l'instant : passage en tâche de fond (Django-Q/Celery). Le moteur de rapprochement reste synchrone dans la requête HTTP — acceptable vu le nombre de requêtes quasi constant obtenu au Sprint 2 (~17-18 quel que soit le volume/jour). A reconsidérer seulement si un besoin concret apparaît (delai perçu par l'utilisateur, timeout HTTP).
 
 ### Sprint 6 — Rôles dynamiques, permissions & finitions
 - Modèle `Role`/permissions dynamique : CRUD des rôles, assignation/retrait de privilèges par rôle
