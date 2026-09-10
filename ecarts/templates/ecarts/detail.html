@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+
+{% block title %}Ecart {{ ecart.transid_mvola }} - interopRapprochement{% endblock %}
+
+{% block content %}
+<h1 class="h4 mb-3">Rapprochement MVOLA</h1>
+{% include "transactions/_mvola_tabs.html" %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h2 class="h5 mb-1">Ecart {{ ecart.transid_mvola }}</h2>
+        <span class="badge {% if ecart.type_ecart == 'ORPHELINE_MVOLA' %}text-bg-warning{% else %}text-bg-info{% endif %}">
+            {{ ecart.get_type_ecart_display }}
+        </span>
+        <span class="badge {% if ecart.statut == 'REGULARISE' %}text-bg-success{% elif ecart.statut == 'EN_COURS' %}text-bg-secondary{% else %}text-bg-danger{% endif %}">
+            {{ ecart.get_statut_display }}
+        </span>
+        <span class="text-muted-debian small ms-2">detecte le {{ ecart.detecte_le }}</span>
+    </div>
+    <a href="{% url 'ecarts:mvola_liste' %}" class="btn btn-outline-secondary btn-sm">Retour a la liste</a>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-6">
+        <div class="card p-3 h-100">
+            <h3 class="h6">Transaction MVOLA</h3>
+            {% if transaction_mvola %}
+            <table class="table table-sm mb-0">
+                <tbody>
+                    <tr><th>TRANSID</th><td>{{ transaction_mvola.transid_mvola }}</td></tr>
+                    <tr><th>Date</th><td>{{ transaction_mvola.date_trans }}</td></tr>
+                    <tr><th>MSISDN</th><td>{{ transaction_mvola.msisdn }}</td></tr>
+                    <tr><th>Nom</th><td>{{ transaction_mvola.nom }}</td></tr>
+                    <tr><th>Montant</th><td>{{ transaction_mvola.amount }}</td></tr>
+                    <tr><th>Type</th><td>{{ transaction_mvola.type_operation }}</td></tr>
+                    <tr><th>Etat</th><td>{{ transaction_mvola.state }}</td></tr>
+                    <tr><th>ORIGFTID</th><td>{{ transaction_mvola.origftid }}</td></tr>
+                </tbody>
+            </table>
+            {% else %}
+            <p class="text-muted-debian mb-0">Aucune transaction MVOLA (orpheline PAMF).</p>
+            {% endif %}
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card p-3 h-100">
+            <h3 class="h6">Transaction PAMF</h3>
+            {% if transaction_pamf %}
+            <table class="table table-sm mb-2">
+                <tbody>
+                    <tr><th>TRANSID</th><td>{{ transaction_pamf.transid_mvola }}</td></tr>
+                    <tr><th>Date</th><td>{{ transaction_pamf.posting_date }}</td></tr>
+                    <tr><th>rAutotransactionID</th><td>{{ transaction_pamf.r_autotransaction_id }}</td></tr>
+                    <tr><th>Heure</th><td>{{ transaction_pamf.time }}</td></tr>
+                    <tr><th>Note</th><td>{{ transaction_pamf.note }}</td></tr>
+                </tbody>
+            </table>
+            <details>
+                <summary class="small text-muted-debian" style="cursor: pointer;">responseBody (brut)</summary>
+                <pre class="small border rounded p-2 mt-2" style="white-space: pre-wrap;">{{ transaction_pamf.response_body }}</pre>
+            </details>
+            {% else %}
+            <p class="text-muted-debian mb-0">Aucune transaction PAMF (orpheline MVOLA).</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="card p-3 h-100">
+            <h3 class="h6">Changer le statut</h3>
+            <form method="post" action="{% url 'ecarts:changer_statut' ecart.pk %}">
+                {% csrf_token %}
+                {{ statut_form.nouveau_statut }}
+                <button type="submit" class="btn btn-debian btn-sm mt-2">Mettre a jour</button>
+            </form>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card p-3 h-100">
+            <h3 class="h6">Ajouter un commentaire</h3>
+            <form method="post" action="{% url 'ecarts:ajouter_commentaire' ecart.pk %}">
+                {% csrf_token %}
+                {{ commentaire_form.texte }}
+                <button type="submit" class="btn btn-debian btn-sm mt-2">Commenter</button>
+            </form>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card p-3 h-100">
+            <h3 class="h6">Ajouter une piece jointe</h3>
+            <form method="post" enctype="multipart/form-data" action="{% url 'ecarts:ajouter_piece_jointe' ecart.pk %}">
+                {% csrf_token %}
+                <div class="mb-2">{{ piece_jointe_form.fichier }}</div>
+                {{ piece_jointe_form.commentaire }}
+                <button type="submit" class="btn btn-debian btn-sm mt-2">Joindre</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="card p-3">
+    <h3 class="h6 mb-3">Historique</h3>
+    {% if historique %}
+    <ul class="list-group list-group-flush">
+        {% for h in historique %}
+        <li class="list-group-item">
+            <div class="d-flex justify-content-between">
+                <strong>{{ h.get_action_display }}</strong>
+                <span class="text-muted-debian small">{{ h.auteur|default:"utilisateur supprime" }} - {{ h.horodatage }}</span>
+            </div>
+            {% if h.action == 'CHANGEMENT_STATUT' %}
+            <div class="small">{{ h.ancien_statut }} -> {{ h.nouveau_statut }}</div>
+            {% elif h.action == 'COMMENTAIRE' %}
+            <div class="small">{{ h.commentaire }}</div>
+            {% elif h.action == 'PIECE_JOINTE' %}
+            <div class="small">
+                <a href="{{ h.fichier.url }}" target="_blank" rel="noopener">{{ h.fichier.name }}</a>
+                {% if h.commentaire %} - {{ h.commentaire }}{% endif %}
+            </div>
+            {% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="text-muted-debian mb-0">Aucune action enregistree pour le moment.</p>
+    {% endif %}
+</div>
+{% endblock %}

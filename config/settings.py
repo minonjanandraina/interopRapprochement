@@ -130,6 +130,8 @@ MEDIA_ROOT = BASE_DIR / 'media'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+TEST_RUNNER = 'config.test_runner.TempMediaTestRunner'
+
 
 # Email (notifications - cf. CLAUDE.md section "Serveur mail")
 # Serveur SMTP interne PAMF, sans authentification ni TLS.

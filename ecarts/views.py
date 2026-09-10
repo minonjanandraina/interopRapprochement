@@ -1,11 +1,13 @@
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.shortcuts import render
+from django.shortcuts import get_object_or_404, redirect, render
 
 from core.htmx import is_htmx_request
 from core.pagination import paginate
 
-from .forms import FiltreEcartForm
+from .forms import ChangerStatutForm, CommentaireForm, FiltreEcartForm, PieceJointeForm
 from .models import Ecart
+from .services import ajouter_commentaire, ajouter_piece_jointe, changer_statut
 
 
 @login_required
@@ -33,3 +35,66 @@ def mvola_liste(request):
 
     context.update({'active_tab': 'ecarts', 'active_service': 'mvola'})
     return render(request, 'ecarts/liste_mvola.html', context)
+
+
+@login_required
+def detail(request, pk):
+    ecart = get_object_or_404(
+        Ecart.objects.select_related('resultat__transaction_mvola', 'resultat__transaction_pamf'), pk=pk,
+    )
+    context = {
+        'ecart': ecart,
+        'transaction_mvola': ecart.resultat.transaction_mvola,
+        'transaction_pamf': ecart.resultat.transaction_pamf,
+        'commentaire_form': CommentaireForm(),
+        'statut_form': ChangerStatutForm(initial={'nouveau_statut': ecart.statut}),
+        'piece_jointe_form': PieceJointeForm(),
+        'historique': ecart.historique.select_related('auteur').all(),
+        'active_tab': 'ecarts',
+        'active_service': 'mvola',
+    }
+    return render(request, 'ecarts/detail.html', context)
+
+
+@login_required
+def ajouter_commentaire_vue(request, pk):
+    ecart = get_object_or_404(Ecart, pk=pk)
+    if request.method == 'POST':
+        form = CommentaireForm(request.POST)
+        if form.is_valid():
+            ajouter_commentaire(ecart, request.user, form.cleaned_data['texte'])
+            messages.success(request, 'Commentaire ajoute.')
+        else:
+            messages.error(request, 'Commentaire invalide.')
+    return redirect('ecarts:detail', pk=pk)
+
+
+@login_required
+def changer_statut_vue(request, pk):
+    ecart = get_object_or_404(Ecart, pk=pk)
+    if request.method == 'POST':
+        form = ChangerStatutForm(request.POST)
+        if form.is_valid():
+            resultat = changer_statut(ecart, request.user, form.cleaned_data['nouveau_statut'])
+            if resultat:
+                messages.success(request, 'Statut mis a jour.')
+            else:
+                messages.info(request, 'Le statut etait deja a jour.')
+        else:
+            messages.error(request, 'Statut invalide.')
+    return redirect('ecarts:detail', pk=pk)
+
+
+@login_required
+def ajouter_piece_jointe_vue(request, pk):
+    ecart = get_object_or_404(Ecart, pk=pk)
+    if request.method == 'POST':
+        form = PieceJointeForm(request.POST, request.FILES)
+        if form.is_valid():
+            ajouter_piece_jointe(
+                ecart, request.user, form.cleaned_data['fichier'], form.cleaned_data.get('commentaire', ''),
+            )
+            messages.success(request, 'Piece jointe ajoutee.')
+        else:
+            messages.error(request, 'Piece jointe invalide.')
+    return redirect('ecarts:detail', pk=pk)

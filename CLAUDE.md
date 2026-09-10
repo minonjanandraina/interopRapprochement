@@ -164,11 +164,13 @@ _Aucun point ouvert pour le moment._
 - [x] Pagination factorisee (`core.pagination.paginate`, template `_pagination.html`) réutilisée par les 3 listes et déjà utilisée par le modal de détail (Sprint 2)
 - Ces 3 listes sont ajoutées comme onglets supplémentaires de l'écran "Rapprochement MVOLA" (cf. Décisions prises, organisation de l'interface), plutôt que dans une section separée — coherent avec le principe "un service = un ensemble d'onglets"
 
-### Sprint 4 — Traitement des écarts & régularisation
-> Le modèle `Ecart` existe déjà (généré automatiquement au Sprint 2) ; ce sprint construit le workflow et l'UI de traitement par-dessus.
-- Détail d'un écart (transaction MVOLA vs PAMF côte à côte, `responseBody`)
-- Actions de traitement (marquer régularisé, commentaire, pièce jointe via `FileField`)
-- Historique/suivi des régularisations (qui, quand, quelle action)
+### Sprint 4 — Traitement des écarts & régularisation ✅ terminé
+- [x] Détail d'un écart (`ecarts:detail`, lien "Détails" depuis la liste) : transaction MVOLA vs PAMF côte à côte, `responseBody` affiché (repliable) côté PAMF
+- [x] Actions de traitement : changer le statut (`DETECTE`/`EN_COURS`/`REGULARISE`), ajouter un commentaire, joindre un fichier (`FileField`, stocké sous `media/ecarts/pieces_jointes/%Y/%m/`)
+- [x] Historique/suivi (modèle `EcartHistorique`, app `ecarts`) : qui (`auteur`), quand (`horodatage`), quelle action (`COMMENTAIRE` / `CHANGEMENT_STATUT` avec ancien+nouveau statut / `PIECE_JOINTE`), affiché en timeline sur l'écran de détail
+  - Un changement de statut vers la même valeur ne crée pas d'entrée (pas de bruit dans l'historique)
+- [x] Validé sur un écart réel (orpheline MVOLA du 2026-09-07) : commentaire, changement de statut et pièce jointe enregistrés avec le bon auteur/horodatage
+- [x] Corrigé au passage (dette Sprint 1) : les tests qui uploadent un fichier (CSV MVOLA, pièce jointe) écrivaient réellement sous `media/` et polluaient l'environnement de dev au fil des exécutions. `TEST_RUNNER` (`config.test_runner.TempMediaTestRunner`) redirige `MEDIA_ROOT` vers un dossier temporaire pendant les tests.
 
 ### Sprint 5 — Automatisation & planification
 - La réconciliation reste déclenchée manuellement par date (cf. Décisions prises) — pas de planification automatique de la requête CBS
