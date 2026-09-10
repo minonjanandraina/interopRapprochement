@@ -8,10 +8,11 @@ from django.conf import settings
 REQUETE_PAMF = """
 select
   mc.rAutotransactionID, mc.postingDate, mc.Time, mc.Note,
-  al.RequestID as TRANSID_MVOLA, al.responseBody
+  al.RequestID as TRANSID_MVOLA, al.responseBody,
+  case when mc.Status = 3 then 1 else 0 end as is_sucess
 from cbs.dbo.mcTransaction mc
 join bagsPAMF_CBS_MC.dbo.apiLog al on al.apiLogID = mc.requestID
-where mc.rMerchantID = 13 and mc.Status = 3 and mc.postingDate = ?
+where mc.rMerchantID = 13 and mc.postingDate = ?
 """
 
 

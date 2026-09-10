@@ -92,6 +92,10 @@ class TransactionPamf(models.Model):
     note = models.TextField(blank=True)
     transid_mvola = models.CharField('TRANSID_MVOLA', max_length=50, unique=True, db_index=True)
     response_body = models.TextField(blank=True)
+    is_success = models.BooleanField(
+        'is_sucess', default=True,
+        help_text="Status CBS = 3 (poste/valide). False = transaction presente mais en echec cote PAMF.",
+    )
     import_requete = models.ForeignKey(
         ImportRequetePamf, on_delete=models.PROTECT, related_name='transactions',
     )
@@ -145,6 +149,10 @@ class ResultatRapprochement(models.Model):
         ORPHELINE_MVOLA = 'ORPHELINE_MVOLA', 'Orpheline MVOLA'
         ORPHELINE_PAMF = 'ORPHELINE_PAMF', 'Orpheline PAMF'
 
+    class ActionRecommandee(models.TextChoices):
+        ROLLBACK_MVOLA = 'ROLLBACK_MVOLA', 'Rollback cote MVOLA'
+        TICKET_ASPEKT = 'TICKET_ASPEKT', 'Creation ticket Aspekt'
+
     rapprochement = models.ForeignKey(Rapprochement, on_delete=models.CASCADE, related_name='resultats')
     transid_mvola = models.CharField(max_length=50, db_index=True)
     statut = models.CharField(max_length=20, choices=Statut.choices)
@@ -164,3 +172,16 @@ class ResultatRapprochement(models.Model):
 
     def __str__(self):
         return f'{self.transid_mvola} - {self.statut}'
+
+    @property
+    def action_recommandee(self):
+        """Action recommandee pour une orpheline MVOLA, cf. CLAUDE.md :
+
+        - une ligne PAMF existe mais en echec (is_success=False) -> rollback recommande cote MVOLA
+        - aucune ligne PAMF -> creation d'un ticket Aspekt pour regularisation
+        """
+        if self.statut != self.Statut.ORPHELINE_MVOLA:
+            return None
+        if self.transaction_pamf is not None and not self.transaction_pamf.is_success:
+            return self.ActionRecommandee.ROLLBACK_MVOLA
+        return self.ActionRecommandee.TICKET_ASPEKT

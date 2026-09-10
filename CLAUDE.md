@@ -37,18 +37,19 @@ Deux sources de transactions à rapprocher (clé de jointure : `TRANSID_MVOLA`) 
 
 ## Source 2 : transactions PAMF (base CBS / SQL Server)
 
-Requête de référence :
+Requête de référence (mise à jour — ne filtre plus sur `Status`, cf. décision ci-dessous) :
 ```sql
 select
   mc.rAutotransactionID, mc.postingDate, mc.Time, mc.Note,
-  al.RequestID as TRANSID_MVOLA, al.responseBody
+  al.RequestID as TRANSID_MVOLA, al.responseBody,
+  case when mc.Status = 3 then 1 else 0 end as is_sucess
 from cbs.dbo.mcTransaction mc
 join bagsPAMF_CBS_MC.dbo.apiLog al on al.apiLogID = mc.requestID
-where mc.rMerchantID = 13 and mc.Status = 3 and mc.postingDate = '2026-09-02'
+where mc.rMerchantID = 13 and mc.postingDate = ?
 ```
 - `mcTransaction` : table des transactions du core bancaire (CBS).
 - `rMerchantID = 13` : identifie le marchand MVOLA.
-- `Status = 3` : transaction validée/postée.
+- `is_sucess` (1/0) : dérivé de `Status = 3` (validée/postée). **Toutes les transactions de la journée sont ramenées, y compris celles en échec** — c'est ce champ qui distingue succès/échec côté PAMF, stocké dans `TransactionPamf.is_success`.
 - Jointure sur `apiLog` pour récupérer `RequestID` (aliasé `TRANSID_MVOLA`, clé de rapprochement avec le CSV) et `responseBody` (payload brut de l'appel API, utile pour l'investigation d'un écart).
 - `postingDate` filtre par jour, à faire correspondre à la date du fichier CSV MVOLA du même jour.
 
@@ -126,13 +127,18 @@ _Aucun point ouvert pour le moment._
   2. Le système vérifie que le CSV MVOLA de cette date a déjà été importé manuellement (cf. décision d'import ci-dessus).
   3. Si oui → interrogation de la base CBS (requête PAMF) pour cette même date. **Il n'existe pas d'écran d'import PAMF manuel séparé** : l'appel pyodbc/CBS est uniquement déclenché automatiquement à cette étape.
   4. Rapprochement des deux jeux de données (clé `TRANSID_MVOLA`) et **insertion en table locale** du résultat, avec un statut par transaction :
-     - `ORPHELINE_MVOLA` — présente côté MVOLA, absente côté PAMF
+     - `ORPHELINE_MVOLA` — présente côté MVOLA, et côté PAMF soit absente, soit présente **en échec** (`is_success=False`)
      - `ORPHELINE_PAMF` — présente côté PAMF, absente côté MVOLA
-     - `SUCCESS` — présente des deux côtés (rapprochée)
+     - `SUCCESS` — présente des deux côtés **et** `is_success=True` côté PAMF
   - Implémenté par `Rapprochement` (un enregistrement par date) + `ResultatRapprochement` (un enregistrement par `TRANSID_MVOLA`), app `transactions`.
 - **Relance d'un rapprochement : idempotente et non destructive.** Relancer le rapprochement d'une date déjà traitée met à jour `Rapprochement`/`ResultatRapprochement` en place (pas de duplication) et ne recrée pas les `Ecart` déjà générés : un écart déjà en cours de traitement ou régularisé conserve son statut même si la date est re-rapprochée.
   - Matching implémenté en requêtes bulk (`bulk_create`/`bulk_update`, par lots de 200) plutôt qu'un aller-retour DB par transaction : le nombre de requêtes reste quasi constant (~17-18) de 10 à 300 transactions/jour, valide pour le volume actuel (quelques centaines/jour). A revoir seulement si le volume grimpe de plusieurs ordres de grandeur ou si la latence CBS elle-meme devient le goulot (passage en tache de fond, Sprint 5).
 - **Génération des écarts.** A la fin de chaque rapprochement, un `Ecart` (app `ecarts`) est automatiquement créé pour chaque `ResultatRapprochement` de statut `ORPHELINE_MVOLA` ou `ORPHELINE_PAMF` (statut de suivi initial `DETECTE`). Aucun `Ecart` n'est créé pour les lignes `SUCCESS`.
+- **Action recommandée pour une orpheline MVOLA.** Déduite (propriété calculée `ResultatRapprochement.action_recommandee`, déléguée par `Ecart.action_recommandee`), jamais stockée en dur — toujours recalculée depuis `transaction_pamf` :
+  - une ligne PAMF existe mais en échec (`is_success=False`) → **`ROLLBACK_MVOLA`** : le wallet doit être crédité en retour côté MVOLA. Notre système n'a pas d'accès en écriture à MVOLA (sources en lecture seule) : l'écran affiche la recommandation, l'agent effectue le rollback ailleurs puis clique "Confirmer le rollback effectué" (trace une entrée `EcartHistorique` de type `ROLLBACK_CONFIRME`, avec référence/commentaire libre).
+  - aucune ligne PAMF trouvée → **`TICKET_ASPEKT`** : l'agent crée manuellement un ticket dans Aspekt (aucune intégration API — pas d'accès/contrat Aspekt fourni à ce jour) puis enregistre sa référence via le bouton dédié (entrée `EcartHistorique` de type `TICKET_ASPEKT`, `reference_externe` = numéro de ticket).
+  - Ces deux actions réutilisent le mécanisme d'historique du Sprint 4 plutôt que d'introduire un nouveau modèle de suivi.
+  - Validé sur données réelles : avant ce changement de requête, 17 transactions du 2026-09-07 étaient classées `ORPHELINE_MVOLA` sans ligne PAMF (recommandation implicite : ticket). Après la mise à jour de la requête CBS (suppression du filtre `Status=3`), ces 17 transactions ont en réalité une ligne PAMF en échec → la recommandation correcte est `ROLLBACK_MVOLA`, pas un ticket. Ce changement corrige un risque réel de créer des tickets Aspekt inutiles pour des cas qui ne nécessitent qu'un rollback.
 - **Organisation de l'interface : sidebar par service.** La navigation principale est une sidebar listant les services de rapprochement : `MVOLA` (actif aujourd'hui), avec `Orange Money` et `Airtel Money` déjà présents en placeholder "bientôt disponible" pour anticiper leur ajout futur. L'écran d'un service est organisé en onglets : `Import <service>` et `Lancement rapprochement`. Ce dernier affiche la liste des rapprochements (un par date, avec les compteurs MVOLA / PAMF / rapprochées / orphelines) et un bouton "Détails" qui ouvre un modal Bootstrap chargé via HTMX, avec 3 sous-onglets paginés (HTMX) : transactions MVOLA, transactions PAMF, orphelines.
 - **Destinataires des notifications email.** Utilisateurs actifs (`is_active`) avec `is_email_verified=True` (inscription standard via le module `user`), **ou** `is_staff=True` (comptes admin/superuser créés hors du flux d'inscription, qui ne passent jamais par la validation email). Pas encore de préférences de notification par utilisateur ni de ciblage par rôle — à revoir au Sprint 6 quand les rôles dynamiques existeront.
 
@@ -172,6 +178,7 @@ _Aucun point ouvert pour le moment._
   - Un changement de statut vers la même valeur ne crée pas d'entrée (pas de bruit dans l'historique)
 - [x] Validé sur un écart réel (orpheline MVOLA du 2026-09-07) : commentaire, changement de statut et pièce jointe enregistrés avec le bon auteur/horodatage
 - [x] Corrigé au passage (dette Sprint 1) : les tests qui uploadent un fichier (CSV MVOLA, pièce jointe) écrivaient réellement sous `media/` et polluaient l'environnement de dev au fil des exécutions. `TEST_RUNNER` (`config.test_runner.TempMediaTestRunner`) redirige `MEDIA_ROOT` vers un dossier temporaire pendant les tests.
+- [x] Extension post-Sprint 5 : requête CBS mise à jour (plus de filtre `Status=3`, ajout `is_sucess`) pour distinguer une transaction PAMF réellement absente d'une transaction présente mais en échec. Deux actions de traitement supplémentaires (cf. Décisions prises - action recommandée) : "Confirmer le rollback effectué" (`ROLLBACK_CONFIRME`) et "Enregistrer le ticket Aspekt" (`TICKET_ASPEKT`), affichées conditionnellement sur l'écran de détail selon l'action recommandée.
 
 ### Sprint 5 — Automatisation & planification ✅ terminé (notifications) / non fait (tâche de fond, jugé non nécessaire pour l'instant)
 - [x] La réconciliation reste déclenchée manuellement par date (cf. Décisions prises) — pas de planification automatique de la requête CBS (inchangé, aucun développement necessaire)

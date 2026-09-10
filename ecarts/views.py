@@ -5,9 +5,22 @@ from django.shortcuts import get_object_or_404, redirect, render
 from core.htmx import is_htmx_request
 from core.pagination import paginate
 
-from .forms import ChangerStatutForm, CommentaireForm, FiltreEcartForm, PieceJointeForm
+from .forms import (
+    ChangerStatutForm,
+    CommentaireForm,
+    FiltreEcartForm,
+    PieceJointeForm,
+    RollbackConfirmeForm,
+    TicketAspektForm,
+)
 from .models import Ecart
-from .services import ajouter_commentaire, ajouter_piece_jointe, changer_statut
+from .services import (
+    ajouter_commentaire,
+    ajouter_piece_jointe,
+    changer_statut,
+    confirmer_rollback,
+    enregistrer_ticket_aspekt,
+)
 
 
 @login_required
@@ -49,6 +62,8 @@ def detail(request, pk):
         'commentaire_form': CommentaireForm(),
         'statut_form': ChangerStatutForm(initial={'nouveau_statut': ecart.statut}),
         'piece_jointe_form': PieceJointeForm(),
+        'ticket_aspekt_form': TicketAspektForm(),
+        'rollback_form': RollbackConfirmeForm(),
         'historique': ecart.historique.select_related('auteur').all(),
         'active_tab': 'ecarts',
         'active_service': 'mvola',
@@ -97,4 +112,30 @@ def ajouter_piece_jointe_vue(request, pk):
             messages.success(request, 'Piece jointe ajoutee.')
         else:
             messages.error(request, 'Piece jointe invalide.')
+    return redirect('ecarts:detail', pk=pk)
+
+
+@login_required
+def enregistrer_ticket_aspekt_vue(request, pk):
+    ecart = get_object_or_404(Ecart, pk=pk)
+    if request.method == 'POST':
+        form = TicketAspektForm(request.POST)
+        if form.is_valid():
+            enregistrer_ticket_aspekt(ecart, request.user, form.cleaned_data['reference'])
+            messages.success(request, 'Ticket Aspekt enregistre.')
+        else:
+            messages.error(request, 'Reference de ticket invalide.')
+    return redirect('ecarts:detail', pk=pk)
+
+
+@login_required
+def confirmer_rollback_vue(request, pk):
+    ecart = get_object_or_404(Ecart, pk=pk)
+    if request.method == 'POST':
+        form = RollbackConfirmeForm(request.POST)
+        if form.is_valid():
+            confirmer_rollback(ecart, request.user, form.cleaned_data.get('reference', ''))
+            messages.success(request, 'Rollback confirme.')
+        else:
+            messages.error(request, 'Formulaire invalide.')
     return redirect('ecarts:detail', pk=pk)

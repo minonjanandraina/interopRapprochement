@@ -49,3 +49,6 @@ class FiltrePamfForm(forms.Form):
                                      widget=forms.TextInput(attrs={'class': 'form-control form-control-sm'}))
     r_autotransaction_id = forms.CharField(required=False, label='rAutotransactionID',
                                             widget=forms.TextInput(attrs={'class': 'form-control form-control-sm'}))
+    is_success = forms.ChoiceField(required=False, label='Statut CBS',
+                                    choices=[('', 'Tous'), ('1', 'Succes'), ('0', 'Echec')],
+                                    widget=forms.Select(attrs={'class': 'form-select form-select-sm'}))

@@ -31,3 +31,19 @@ def ajouter_piece_jointe(ecart, auteur, fichier, commentaire=''):
         ecart=ecart, auteur=auteur, action=EcartHistorique.Action.PIECE_JOINTE,
         fichier=fichier, commentaire=commentaire,
     )
+
+
+def enregistrer_ticket_aspekt(ecart, auteur, reference):
+    """Trace la creation (manuelle, hors de cette appli) d'un ticket Aspekt de regularisation."""
+    return EcartHistorique.objects.create(
+        ecart=ecart, auteur=auteur, action=EcartHistorique.Action.TICKET_ASPEKT,
+        reference_externe=reference,
+    )
+
+
+def confirmer_rollback(ecart, auteur, reference=''):
+    """Trace la confirmation (manuelle, hors de cette appli) d'un rollback effectue cote MVOLA."""
+    return EcartHistorique.objects.create(
+        ecart=ecart, auteur=auteur, action=EcartHistorique.Action.ROLLBACK_CONFIRME,
+        reference_externe=reference,
+    )

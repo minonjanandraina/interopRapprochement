@@ -15,10 +15,44 @@
         <span class="badge {% if ecart.statut == 'REGULARISE' %}text-bg-success{% elif ecart.statut == 'EN_COURS' %}text-bg-secondary{% else %}text-bg-danger{% endif %}">
             {{ ecart.get_statut_display }}
         </span>
+        {% if ecart.action_recommandee %}
+        <span class="badge {% if ecart.action_recommandee == 'ROLLBACK_MVOLA' %}text-bg-danger{% else %}text-bg-warning{% endif %}">
+            {{ ecart.action_recommandee.label }}
+        </span>
+        {% endif %}
         <span class="text-muted-debian small ms-2">detecte le {{ ecart.detecte_le }}</span>
     </div>
     <a href="{% url 'ecarts:mvola_liste' %}" class="btn btn-outline-secondary btn-sm">Retour a la liste</a>
 </div>
+
+{% if ecart.action_recommandee == 'ROLLBACK_MVOLA' %}
+<div class="card p-3 mb-4 border-danger">
+    <h3 class="h6">Action recommandee : <span class="badge text-bg-danger">{{ ecart.action_recommandee.label }}</span></h3>
+    <p class="text-muted-debian small">
+        Une ligne PAMF existe pour cette transaction mais en echec (non postee cote banque).
+        Le wallet MVOLA doit etre credite en retour (rollback), a effectuer hors de cette application,
+        puis confirme ci-dessous.
+    </p>
+    <form method="post" action="{% url 'ecarts:confirmer_rollback' ecart.pk %}" class="row g-2 align-items-end">
+        {% csrf_token %}
+        <div class="col-md-8">{{ rollback_form.reference }}</div>
+        <div class="col-md-4"><button type="submit" class="btn btn-debian btn-sm">Confirmer le rollback effectue</button></div>
+    </form>
+</div>
+{% elif ecart.action_recommandee == 'TICKET_ASPEKT' %}
+<div class="card p-3 mb-4 border-warning">
+    <h3 class="h6">Action recommandee : <span class="badge text-bg-warning">{{ ecart.action_recommandee.label }}</span></h3>
+    <p class="text-muted-debian small">
+        Aucune ligne PAMF trouvee pour cette transaction. Creer un ticket Aspekt (hors de cette
+        application) pour investigation/regularisation, puis enregistrer sa reference ci-dessous.
+    </p>
+    <form method="post" action="{% url 'ecarts:enregistrer_ticket_aspekt' ecart.pk %}" class="row g-2 align-items-end">
+        {% csrf_token %}
+        <div class="col-md-8">{{ ticket_aspekt_form.reference }}</div>
+        <div class="col-md-4"><button type="submit" class="btn btn-debian btn-sm">Enregistrer le ticket</button></div>
+    </form>
+</div>
+{% endif %}
 
 <div class="row g-3 mb-4">
     <div class="col-md-6">
@@ -53,6 +87,16 @@
                     <tr><th>rAutotransactionID</th><td>{{ transaction_pamf.r_autotransaction_id }}</td></tr>
                     <tr><th>Heure</th><td>{{ transaction_pamf.time }}</td></tr>
                     <tr><th>Note</th><td>{{ transaction_pamf.note }}</td></tr>
+                    <tr>
+                        <th>Statut CBS</th>
+                        <td>
+                            {% if transaction_pamf.is_success %}
+                            <span class="badge text-bg-success">Succes</span>
+                            {% else %}
+                            <span class="badge text-bg-danger">Echec</span>
+                            {% endif %}
+                        </td>
+                    </tr>
                 </tbody>
             </table>
             <details>
@@ -119,6 +163,10 @@
                 <a href="{{ h.fichier.url }}" target="_blank" rel="noopener">{{ h.fichier.name }}</a>
                 {% if h.commentaire %} - {{ h.commentaire }}{% endif %}
             </div>
+            {% elif h.action == 'TICKET_ASPEKT' %}
+            <div class="small">Ticket Aspekt : <strong>{{ h.reference_externe }}</strong></div>
+            {% elif h.action == 'ROLLBACK_CONFIRME' %}
+            <div class="small">Rollback confirme{% if h.reference_externe %} - {{ h.reference_externe }}{% endif %}</div>
             {% endif %}
         </li>
         {% endfor %}

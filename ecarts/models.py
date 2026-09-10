@@ -33,6 +33,12 @@ class Ecart(models.Model):
     def __str__(self):
         return f'Ecart {self.transid_mvola} ({self.type_ecart})'
 
+    @property
+    def action_recommandee(self):
+        """Delegue a ResultatRapprochement.action_recommandee (cf. CLAUDE.md - rollback MVOLA
+        vs ticket Aspekt, deduit du statut PAMF is_success)."""
+        return self.resultat.action_recommandee
+
 
 class EcartHistorique(models.Model):
     """Journal des actions de traitement sur un ecart : qui, quand, quelle action."""
@@ -41,6 +47,8 @@ class EcartHistorique(models.Model):
         COMMENTAIRE = 'COMMENTAIRE', 'Commentaire'
         CHANGEMENT_STATUT = 'CHANGEMENT_STATUT', 'Changement de statut'
         PIECE_JOINTE = 'PIECE_JOINTE', 'Piece jointe'
+        TICKET_ASPEKT = 'TICKET_ASPEKT', 'Ticket Aspekt enregistre'
+        ROLLBACK_CONFIRME = 'ROLLBACK_CONFIRME', 'Rollback MVOLA confirme'
 
     ecart = models.ForeignKey(Ecart, on_delete=models.CASCADE, related_name='historique')
     auteur = models.ForeignKey(
@@ -52,6 +60,10 @@ class EcartHistorique(models.Model):
     ancien_statut = models.CharField(max_length=15, blank=True)
     nouveau_statut = models.CharField(max_length=15, blank=True)
     fichier = models.FileField(upload_to='ecarts/pieces_jointes/%Y/%m/', blank=True, null=True)
+    reference_externe = models.CharField(
+        max_length=100, blank=True,
+        help_text='Reference du ticket Aspekt, ou reference/commentaire de la confirmation de rollback.',
+    )
 
     class Meta:
         ordering = ['-horodatage']

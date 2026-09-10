@@ -140,6 +140,8 @@ def mvola_liste_pamf(request):
             queryset = queryset.filter(transid_mvola__icontains=data['transid_mvola'])
         if data['r_autotransaction_id']:
             queryset = queryset.filter(r_autotransaction_id__icontains=data['r_autotransaction_id'])
+        if data['is_success']:
+            queryset = queryset.filter(is_success=(data['is_success'] == '1'))
 
     page_obj, querystring = paginate(request, queryset)
     context = {'form': form, 'page_obj': page_obj, 'querystring': querystring}

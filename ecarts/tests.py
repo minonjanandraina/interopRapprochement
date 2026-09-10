@@ -118,3 +118,48 @@ class DetailEcartViewTests(TestCase):
         self.assertEqual(entree.action, EcartHistorique.Action.PIECE_JOINTE)
         self.assertTrue(entree.fichier.name.endswith('preuve.txt'))
         entree.fichier.delete(save=False)
+
+    def test_ecart_sans_ligne_pamf_recommande_un_ticket_aspekt(self):
+        self.assertEqual(self.ecart_orpheline_mvola.action_recommandee, 'TICKET_ASPEKT')
+
+    def test_enregistrer_ticket_aspekt_cree_une_entree_historique(self):
+        resp = self.client.post(
+            f'/ecarts/mvola/ecarts/{self.ecart_orpheline_mvola.pk}/ticket-aspekt/',
+            {'reference': 'ASP-2026-00042'}, follow=True,
+        )
+        self.assertEqual(resp.status_code, 200)
+        entree = EcartHistorique.objects.get(ecart=self.ecart_orpheline_mvola)
+        self.assertEqual(entree.action, EcartHistorique.Action.TICKET_ASPEKT)
+        self.assertEqual(entree.reference_externe, 'ASP-2026-00042')
+        self.assertEqual(entree.auteur, self.user)
+
+
+class ConfirmerRollbackViewTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='op', email='op@example.com', password='x')
+        self.client = Client()
+        self.client.force_login(self.user)
+
+        fichier = make_csv('2026-09-07_reporting_PAMF.csv', [make_row(transid='555')])
+        importer_fichier_mvola(fichier, self.user)
+        with patch('transactions.services_pamf.fetch_transactions_pamf') as mock_fetch:
+            mock_fetch.return_value = [
+                {'rAutotransactionID': 9, 'postingDate': date(2026, 9, 7), 'Time': '00:00:00',
+                 'Note': '', 'TRANSID_MVOLA': '555', 'responseBody': '', 'is_sucess': 0},
+            ]
+            lancer_rapprochement(date(2026, 9, 7), self.user)
+        self.ecart = Ecart.objects.get(transid_mvola='555')
+
+    def test_ecart_avec_pamf_en_echec_recommande_un_rollback(self):
+        self.assertEqual(self.ecart.action_recommandee, 'ROLLBACK_MVOLA')
+
+    def test_confirmer_rollback_cree_une_entree_historique(self):
+        resp = self.client.post(
+            f'/ecarts/mvola/ecarts/{self.ecart.pk}/rollback-confirme/',
+            {'reference': 'rembourse le 10/09'}, follow=True,
+        )
+        self.assertEqual(resp.status_code, 200)
+        entree = EcartHistorique.objects.get(ecart=self.ecart)
+        self.assertEqual(entree.action, EcartHistorique.Action.ROLLBACK_CONFIRME)
+        self.assertEqual(entree.reference_externe, 'rembourse le 10/09')
+        self.assertEqual(entree.auteur, self.user)

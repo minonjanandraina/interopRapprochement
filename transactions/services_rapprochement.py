@@ -78,10 +78,13 @@ def lancer_rapprochement(date_cible, user):
     for transid in tous_ids:
         mvola = mvola_par_id.get(transid)
         pamf = pamf_par_id.get(transid)
-        if mvola and pamf:
+        if mvola and pamf and pamf.is_success:
             statut = ResultatRapprochement.Statut.SUCCESS
             nb_success += 1
         elif mvola:
+            # Orpheline MVOLA : soit une ligne PAMF existe mais en echec (is_success=False,
+            # rollback recommande cote MVOLA), soit aucune ligne PAMF (ticket Aspekt a creer).
+            # Cf. ResultatRapprochement.action_recommandee et CLAUDE.md.
             statut = ResultatRapprochement.Statut.ORPHELINE_MVOLA
             nb_orph_mvola += 1
         else:

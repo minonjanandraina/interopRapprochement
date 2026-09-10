@@ -39,3 +39,17 @@ class PieceJointeForm(forms.Form):
         required=False, label='Commentaire (optionnel)',
         widget=forms.TextInput(attrs={'class': 'form-control'}),
     )
+
+
+class TicketAspektForm(forms.Form):
+    reference = forms.CharField(
+        label='Reference du ticket Aspekt',
+        widget=forms.TextInput(attrs={'class': 'form-control'}),
+    )
+
+
+class RollbackConfirmeForm(forms.Form):
+    reference = forms.CharField(
+        required=False, label='Reference / commentaire (optionnel)',
+        widget=forms.TextInput(attrs={'class': 'form-control'}),
+    )

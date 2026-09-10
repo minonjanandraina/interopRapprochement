@@ -27,7 +27,7 @@
     <div class="table-responsive">
         <table class="table table-sm table-striped">
             <thead>
-                <tr><th>TRANSID</th><th>Date</th><th>rAutotransactionID</th><th>Heure</th><th>Note</th></tr>
+                <tr><th>TRANSID</th><th>Date</th><th>rAutotransactionID</th><th>Heure</th><th>Statut CBS</th><th>Note</th></tr>
             </thead>
             <tbody>
                 {% for t in page_obj %}
@@ -36,10 +36,17 @@
                     <td>{{ t.posting_date }}</td>
                     <td>{{ t.r_autotransaction_id }}</td>
                     <td>{{ t.time }}</td>
+                    <td>
+                        {% if t.is_success %}
+                        <span class="badge text-bg-success">Succes</span>
+                        {% else %}
+                        <span class="badge text-bg-danger">Echec</span>
+                        {% endif %}
+                    </td>
                     <td>{{ t.note|truncatechars:60 }}</td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="5" class="text-muted-debian">Aucune transaction.</td></tr>
+                <tr><td colspan="6" class="text-muted-debian">Aucune transaction.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
@@ -49,7 +56,7 @@
     <div class="table-responsive">
         <table class="table table-sm table-striped">
             <thead>
-                <tr><th>TRANSID</th><th>Statut</th><th>MSISDN / Nom (MVOLA)</th><th>Montant (MVOLA)</th><th>rAutotransactionID (PAMF)</th></tr>
+                <tr><th>TRANSID</th><th>Statut</th><th>Action recommandee</th><th>MSISDN / Nom (MVOLA)</th><th>Montant (MVOLA)</th><th>rAutotransactionID (PAMF)</th></tr>
             </thead>
             <tbody>
                 {% for res in page_obj %}
@@ -60,12 +67,21 @@
                             {{ res.get_statut_display }}
                         </span>
                     </td>
+                    <td>
+                        {% if res.action_recommandee %}
+                        <span class="badge {% if res.action_recommandee == 'ROLLBACK_MVOLA' %}text-bg-danger{% else %}text-bg-warning{% endif %}">
+                            {{ res.action_recommandee.label }}
+                        </span>
+                        {% else %}
+                        <span class="text-muted-debian">-</span>
+                        {% endif %}
+                    </td>
                     <td>{% if res.transaction_mvola %}{{ res.transaction_mvola.msisdn }} - {{ res.transaction_mvola.nom }}{% else %}-{% endif %}</td>
                     <td>{% if res.transaction_mvola %}{{ res.transaction_mvola.amount }}{% else %}-{% endif %}</td>
                     <td>{% if res.transaction_pamf %}{{ res.transaction_pamf.r_autotransaction_id }}{% else %}-{% endif %}</td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="5" class="text-muted-debian">Aucune orpheline. Rapprochement complet.</td></tr>
+                <tr><td colspan="6" class="text-muted-debian">Aucune orpheline. Rapprochement complet.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
