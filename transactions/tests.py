@@ -1,3 +1,4 @@
+import os
 from datetime import date
 from unittest.mock import patch
 
@@ -267,7 +268,10 @@ class NotificationNouveauxEcartsTests(TestCase):
         self.assertIn('222', mail.outbox[0].body)
 
     @patch('transactions.services_pamf.fetch_transactions_pamf')
-    def test_relance_sans_nouvel_ecart_ne_notifie_pas_a_nouveau(self, mock_fetch):
+    def test_relance_renotifie_car_les_ecarts_sont_recrees(self, mock_fetch):
+        """Une relance efface et recree les Ecart (cf. Decisions prises) : le systeme ne peut
+        donc plus distinguer un ecart deja connu d'un ecart reellement nouveau, et renotifie a
+        chaque relance tant que l'ecart existe."""
         fichier = make_csv('2026-09-07_reporting_PAMF.csv', [make_row(transid='222')])
         importer_fichier_mvola(fichier, self.user)
         mock_fetch.return_value = []
@@ -277,7 +281,7 @@ class NotificationNouveauxEcartsTests(TestCase):
         with self.captureOnCommitCallbacks(execute=True):
             lancer_rapprochement(self.date_cible, self.user)
 
-        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(len(mail.outbox), 2)
 
     @patch('transactions.services_pamf.fetch_transactions_pamf')
     def test_aucun_destinataire_verifie_alors_pas_denvoi(self, mock_fetch):
@@ -322,8 +326,10 @@ class NotificationNouveauxEcartsTests(TestCase):
         self.assertEqual(rapprochement.statut, Rapprochement.Statut.TERMINE)
 
     @patch('transactions.services_pamf.fetch_transactions_pamf')
-    def test_relance_preserve_le_statut_de_regularisation_existant(self, mock_fetch):
-        from ecarts.models import Ecart
+    def test_relance_efface_le_traitement_deja_effectue(self, mock_fetch):
+        """Decision produit : relancer une date deja traitee efface et recalcule tout, y compris
+        le travail de regularisation deja fait (cf. services_rapprochement docstring)."""
+        from ecarts.models import Ecart, EcartHistorique
 
         fichier = make_csv('2026-09-07_reporting_PAMF.csv', [make_row(transid='222')])
         importer_fichier_mvola(fichier, self.user)
@@ -333,14 +339,41 @@ class NotificationNouveauxEcartsTests(TestCase):
         ecart = Ecart.objects.get(transid_mvola='222')
         ecart.statut = Ecart.Statut.REGULARISE
         ecart.save()
-        resultat_pk = rapprochement.resultats.get(transid_mvola='222').pk
+        EcartHistorique.objects.create(
+            ecart=ecart, auteur=self.user, action=EcartHistorique.Action.COMMENTAIRE, commentaire='traite',
+        )
+        ancien_resultat_pk = rapprochement.resultats.get(transid_mvola='222').pk
+        ancien_ecart_pk = ecart.pk
 
         lancer_rapprochement(self.date_cible, self.user)
 
-        ecart.refresh_from_db()
-        self.assertEqual(ecart.statut, Ecart.Statut.REGULARISE)
-        self.assertEqual(rapprochement.resultats.get(transid_mvola='222').pk, resultat_pk)
-        self.assertEqual(Ecart.objects.filter(transid_mvola='222').count(), 1)
+        self.assertFalse(ResultatRapprochement.objects.filter(pk=ancien_resultat_pk).exists())
+        self.assertFalse(Ecart.objects.filter(pk=ancien_ecart_pk).exists())
+        self.assertFalse(EcartHistorique.objects.filter(ecart_id=ancien_ecart_pk).exists())
+
+        nouvel_ecart = Ecart.objects.get(transid_mvola='222')
+        self.assertEqual(nouvel_ecart.statut, Ecart.Statut.DETECTE)
+        self.assertNotEqual(nouvel_ecart.pk, ancien_ecart_pk)
+
+    @patch('transactions.services_pamf.fetch_transactions_pamf')
+    def test_relance_supprime_la_piece_jointe_physique(self, mock_fetch):
+        from ecarts.models import Ecart
+        from ecarts.services import ajouter_piece_jointe
+
+        fichier = make_csv('2026-09-07_reporting_PAMF.csv', [make_row(transid='222')])
+        importer_fichier_mvola(fichier, self.user)
+        mock_fetch.return_value = []
+
+        lancer_rapprochement(self.date_cible, self.user)
+        ecart = Ecart.objects.get(transid_mvola='222')
+        piece = SimpleUploadedFile('preuve.txt', b'contenu', content_type='text/plain')
+        entree = ajouter_piece_jointe(ecart, self.user, piece)
+        chemin_fichier = entree.fichier.path
+        self.assertTrue(os.path.exists(chemin_fichier))
+
+        lancer_rapprochement(self.date_cible, self.user)
+
+        self.assertFalse(os.path.exists(chemin_fichier))
 
 
 class LancerRapprochementPerformanceTests(TestCase):
