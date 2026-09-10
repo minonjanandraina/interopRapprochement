@@ -1,0 +1,8 @@
+Bonjour {{ user.first_name|default:user.username }},
+
+Merci de vous etre inscrit sur interopRapprochement.
+
+Pour activer votre compte, cliquez sur le lien suivant :
+{{ activation_url }}
+
+Si vous n'etes pas a l'origine de cette inscription, ignorez cet email.

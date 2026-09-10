@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block title %}Lien invalide - interopRapprochement{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card p-4">
+            <h1 class="h4 mb-3">Lien d'activation invalide</h1>
+            <p>Ce lien d'activation est invalide ou a deja ete utilise.</p>
+            <a href="{% url 'user:login' %}" class="btn btn-debian">Retour a la connexion</a>
+        </div>
+    </div>
+</div>
+{% endblock %}

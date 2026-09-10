@@ -1,0 +1,71 @@
+/* Palette inspiree de Debian 13 (Trixie) : fond clair, accent rouge Debian, typographie monospace */
+
+:root {
+    --debian-red: #a81d33;
+    --debian-red-dark: #7e1626;
+    --bg: #f5f5f4;
+    --surface: #ffffff;
+    --border: #dcdad5;
+    --text: #23211f;
+    --text-muted: #6b6862;
+}
+
+body {
+    background-color: var(--bg);
+    color: var(--text);
+    font-family: ui-monospace, "Cascadia Code", "Segoe UI Mono", "Roboto Mono", Menlo, Consolas, monospace;
+}
+
+.navbar-debian {
+    background-color: var(--surface);
+    border-bottom: 3px solid var(--debian-red);
+}
+
+.navbar-debian .navbar-brand {
+    color: var(--debian-red);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+}
+
+.navbar-debian .nav-link {
+    color: var(--text);
+}
+
+.navbar-debian .nav-link:hover {
+    color: var(--debian-red);
+}
+
+.btn-debian {
+    background-color: var(--debian-red);
+    border-color: var(--debian-red);
+    color: #fff;
+}
+
+.btn-debian:hover {
+    background-color: var(--debian-red-dark);
+    border-color: var(--debian-red-dark);
+    color: #fff;
+}
+
+.card {
+    background-color: var(--surface);
+    border: 1px solid var(--border);
+}
+
+a {
+    color: var(--debian-red);
+}
+
+a:hover {
+    color: var(--debian-red-dark);
+}
+
+.app-shell {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 2rem 1rem;
+}
+
+.text-muted-debian {
+    color: var(--text-muted);
+}
