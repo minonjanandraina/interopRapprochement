@@ -1,0 +1,29 @@
+<div class="table-responsive">
+    <table class="table table-sm table-striped">
+        <thead>
+            <tr><th>TRANSID</th><th>Date</th><th>Type</th><th>Statut</th><th>Detecte le</th></tr>
+        </thead>
+        <tbody>
+            {% for e in page_obj %}
+            <tr>
+                <td>{{ e.transid_mvola }}</td>
+                <td>{{ e.date_transaction }}</td>
+                <td>
+                    <span class="badge {% if e.type_ecart == 'ORPHELINE_MVOLA' %}text-bg-warning{% else %}text-bg-info{% endif %}">
+                        {{ e.get_type_ecart_display }}
+                    </span>
+                </td>
+                <td>
+                    <span class="badge {% if e.statut == 'REGULARISE' %}text-bg-success{% elif e.statut == 'EN_COURS' %}text-bg-secondary{% else %}text-bg-danger{% endif %}">
+                        {{ e.get_statut_display }}
+                    </span>
+                </td>
+                <td>{{ e.detecte_le }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="5" class="text-muted-debian">Aucun ecart.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% include "_pagination.html" %}

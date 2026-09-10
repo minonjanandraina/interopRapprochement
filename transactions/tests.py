@@ -4,7 +4,7 @@ from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import connection
-from django.test import TestCase
+from django.test import Client, TestCase
 from django.test.utils import CaptureQueriesContext
 
 from .csv_mvola import FichierMvolaInvalide, importer_fichier_mvola
@@ -27,10 +27,11 @@ HEADER = (
 )
 
 
-def make_row(transid='6757009839', amount='299600'):
+def make_row(transid='6757009839', amount='299600', msisdn='0342022995', nom='Test Client',
+             date_trans='07/09/2026 00:50:49', type_operation='WTB'):
     return (
-        f'07/09/2026 00:50:49;{transid};Completed;0342022995;0385344178;C;Test Client;0;'
-        f'wallettobank;{amount};613951496;614251096;87c0be73-f852-4845-88fd-e5361675ff0f;WTB'
+        f'{date_trans};{transid};Completed;{msisdn};0385344178;C;{nom};0;'
+        f'wallettobank;{amount};613951496;614251096;87c0be73-f852-4845-88fd-e5361675ff0f;{type_operation}'
     )
 
 
@@ -263,3 +264,62 @@ class LancerRapprochementPerformanceTests(TestCase):
         nb_requetes_100 = self._nb_requetes_pour_une_relance(100)
 
         self.assertLess(nb_requetes_100, nb_requetes_10 + 10)
+
+
+class ListeMvolaViewTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='op', email='op@example.com', password='x')
+        self.client = Client()
+        self.client.force_login(self.user)
+        fichier = make_csv('2026-09-07_reporting_PAMF.csv', [
+            make_row(transid='111', msisdn='0341111111', nom='Alice', type_operation='WTB'),
+            make_row(transid='222', msisdn='0342222222', nom='Bob', type_operation='BTW'),
+        ])
+        importer_fichier_mvola(fichier, self.user)
+
+    def test_affiche_toutes_les_transactions_sans_filtre(self):
+        resp = self.client.get('/transactions/mvola/transactions/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, '111')
+        self.assertContains(resp, '222')
+
+    def test_filtre_par_msisdn(self):
+        resp = self.client.get('/transactions/mvola/transactions/', {'msisdn': '0341111111'})
+        self.assertContains(resp, '111')
+        self.assertNotContains(resp, '222')
+
+    def test_filtre_par_type_operation(self):
+        resp = self.client.get('/transactions/mvola/transactions/', {'type_operation': 'BTW'})
+        self.assertContains(resp, '222')
+        self.assertNotContains(resp, '111')
+
+    def test_requete_htmx_ne_renvoie_que_le_fragment(self):
+        resp = self.client.get('/transactions/mvola/transactions/', HTTP_HX_REQUEST='true')
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotContains(resp, '<title>')
+        self.assertContains(resp, '111')
+
+
+class ListePamfViewTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='op', email='op@example.com', password='x')
+        self.client = Client()
+        self.client.force_login(self.user)
+
+    @patch('transactions.services_pamf.fetch_transactions_pamf')
+    def test_affiche_les_transactions_et_filtre_par_transid(self, mock_fetch):
+        mock_fetch.return_value = [
+            {'rAutotransactionID': 1, 'postingDate': date(2026, 9, 7), 'Time': '00:00:00',
+             'Note': '', 'TRANSID_MVOLA': '111', 'responseBody': ''},
+            {'rAutotransactionID': 2, 'postingDate': date(2026, 9, 7), 'Time': '00:00:00',
+             'Note': '', 'TRANSID_MVOLA': '222', 'responseBody': ''},
+        ]
+        importer_transactions_pamf(date(2026, 9, 7), self.user)
+
+        resp = self.client.get('/transactions/mvola/pamf/')
+        self.assertContains(resp, '111')
+        self.assertContains(resp, '222')
+
+        resp2 = self.client.get('/transactions/mvola/pamf/', {'transid_mvola': '111'})
+        self.assertContains(resp2, '111')
+        self.assertNotContains(resp2, '222')

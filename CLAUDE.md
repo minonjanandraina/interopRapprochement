@@ -156,12 +156,13 @@ _Aucun point ouvert pour le moment._
 - [x] Matching en requêtes bulk (nombre de requêtes quasi constant quel que soit le volume du jour, teste jusqu'a 300 transactions) ; test de non-regression dédié (`LancerRapprochementPerformanceTests`)
 - [x] Validé sur données réelles : 3 jours (2026-09-07/08/09) rapprochés via CBS réel, résultats cohérents (624/607 MVOLA/PAMF le 07/09, 17 orphelines)
 
-### Sprint 3 — Consultation (listes)
-> Un aperçu paginé (MVOLA / PAMF / orphelines) existe déjà via le modal "Détails" de l'écran de rapprochement (Sprint 2), pattern de pagination HTMX déjà validé. Reste à construire les vues liste dédiées, navigables indépendamment d'un rapprochement, avec filtres/recherche :
-- Vue liste + filtres/recherche des transactions MVOLA
-- Vue liste + filtres/recherche des transactions PAMF
-- Vue liste des écarts (filtrage par statut, date, type)
-- Interactions HTMX (pagination, filtres partiels sans rechargement)
+### Sprint 3 — Consultation (listes) ✅ terminé
+- [x] Vue liste + filtres/recherche des transactions MVOLA (date, TRANSID, MSISDN, nom, type d'opération) — onglet "Transactions MVOLA" de l'écran MVOLA
+- [x] Vue liste + filtres/recherche des transactions PAMF (date, TRANSID, rAutotransactionID) — onglet "Transactions PAMF"
+- [x] Vue liste des écarts, filtrage par statut / date / type — onglet "Ecarts" (app `ecarts`)
+- [x] Interactions HTMX : le formulaire de filtre et la pagination rafraichissent uniquement `#table-container` (`hx-get`/`hx-target`/`hx-push-url`), sans rechargement de page ; requete HTMX detectee cote serveur (`core.htmx.is_htmx_request`) pour ne renvoyer que le fragment
+- [x] Pagination factorisee (`core.pagination.paginate`, template `_pagination.html`) réutilisée par les 3 listes et déjà utilisée par le modal de détail (Sprint 2)
+- Ces 3 listes sont ajoutées comme onglets supplémentaires de l'écran "Rapprochement MVOLA" (cf. Décisions prises, organisation de l'interface), plutôt que dans une section separée — coherent avec le principe "un service = un ensemble d'onglets"
 
 ### Sprint 4 — Traitement des écarts & régularisation
 > Le modèle `Ecart` existe déjà (généré automatiquement au Sprint 2) ; ce sprint construit le workflow et l'UI de traitement par-dessus.

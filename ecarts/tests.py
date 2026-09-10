@@ -1,3 +1,53 @@
-from django.test import TestCase
+from datetime import date
+from unittest.mock import patch
 
-# Create your tests here.
+from django.contrib.auth import get_user_model
+from django.test import Client, TestCase
+
+from transactions.csv_mvola import importer_fichier_mvola
+from transactions.services_rapprochement import lancer_rapprochement
+from transactions.tests import make_csv, make_row
+
+from .models import Ecart
+
+User = get_user_model()
+
+
+class ListeEcartViewTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='op', email='op@example.com', password='x')
+        self.client = Client()
+        self.client.force_login(self.user)
+
+        fichier = make_csv('2026-09-07_reporting_PAMF.csv', [make_row(transid='111'), make_row(transid='222')])
+        importer_fichier_mvola(fichier, self.user)
+        with patch('transactions.services_pamf.fetch_transactions_pamf') as mock_fetch:
+            mock_fetch.return_value = [
+                {'rAutotransactionID': 1, 'postingDate': date(2026, 9, 7), 'Time': '00:00:00',
+                 'Note': '', 'TRANSID_MVOLA': '111', 'responseBody': ''},
+            ]
+            lancer_rapprochement(date(2026, 9, 7), self.user)
+        # '111' est rapprochee (SUCCESS), '222' est orpheline MVOLA -> un seul Ecart attendu.
+
+    def test_affiche_les_ecarts_orphelins_seulement(self):
+        resp = self.client.get('/ecarts/mvola/ecarts/')
+        self.assertContains(resp, '222')
+        self.assertNotContains(resp, '111')
+
+    def test_filtre_par_statut(self):
+        ecart = Ecart.objects.get(transid_mvola='222')
+        ecart.statut = Ecart.Statut.REGULARISE
+        ecart.save()
+
+        resp = self.client.get('/ecarts/mvola/ecarts/', {'statut': 'REGULARISE'})
+        self.assertContains(resp, '222')
+
+        resp2 = self.client.get('/ecarts/mvola/ecarts/', {'statut': 'DETECTE'})
+        self.assertNotContains(resp2, '222')
+
+    def test_filtre_par_type_ecart(self):
+        resp = self.client.get('/ecarts/mvola/ecarts/', {'type_ecart': 'ORPHELINE_MVOLA'})
+        self.assertContains(resp, '222')
+
+        resp2 = self.client.get('/ecarts/mvola/ecarts/', {'type_ecart': 'ORPHELINE_PAMF'})
+        self.assertNotContains(resp2, '222')

@@ -20,3 +20,32 @@ class RapprochementForm(forms.Form):
         label='Date a rapprocher',
         widget=forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
     )
+
+
+TYPE_OPERATION_CHOICES = [('', 'Tous'), ('WTB', 'WTB'), ('BTW', 'BTW')]
+
+
+class FiltreMvolaForm(forms.Form):
+    date_min = forms.DateField(required=False, label='Du',
+                                widget=forms.DateInput(attrs={'type': 'date', 'class': 'form-control form-control-sm'}))
+    date_max = forms.DateField(required=False, label='Au',
+                                widget=forms.DateInput(attrs={'type': 'date', 'class': 'form-control form-control-sm'}))
+    transid_mvola = forms.CharField(required=False, label='TRANSID',
+                                     widget=forms.TextInput(attrs={'class': 'form-control form-control-sm'}))
+    msisdn = forms.CharField(required=False, label='MSISDN',
+                              widget=forms.TextInput(attrs={'class': 'form-control form-control-sm'}))
+    nom = forms.CharField(required=False, label='Nom',
+                           widget=forms.TextInput(attrs={'class': 'form-control form-control-sm'}))
+    type_operation = forms.ChoiceField(required=False, label='Type', choices=TYPE_OPERATION_CHOICES,
+                                        widget=forms.Select(attrs={'class': 'form-select form-select-sm'}))
+
+
+class FiltrePamfForm(forms.Form):
+    date_min = forms.DateField(required=False, label='Du',
+                                widget=forms.DateInput(attrs={'type': 'date', 'class': 'form-control form-control-sm'}))
+    date_max = forms.DateField(required=False, label='Au',
+                                widget=forms.DateInput(attrs={'type': 'date', 'class': 'form-control form-control-sm'}))
+    transid_mvola = forms.CharField(required=False, label='TRANSID',
+                                     widget=forms.TextInput(attrs={'class': 'form-control form-control-sm'}))
+    r_autotransaction_id = forms.CharField(required=False, label='rAutotransactionID',
+                                            widget=forms.TextInput(attrs={'class': 'form-control form-control-sm'}))

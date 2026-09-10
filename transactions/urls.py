@@ -13,4 +13,6 @@ urlpatterns = [
         views.mvola_rapprochement_lignes,
         name='mvola_rapprochement_lignes',
     ),
+    path('mvola/transactions/', views.mvola_liste_transactions, name='mvola_liste_transactions'),
+    path('mvola/pamf/', views.mvola_liste_pamf, name='mvola_liste_pamf'),
 ]
