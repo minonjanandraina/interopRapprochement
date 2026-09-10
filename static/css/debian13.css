@@ -61,11 +61,73 @@ a:hover {
 }
 
 .app-shell {
-    max-width: 960px;
+    max-width: 1140px;
     margin: 0 auto;
     padding: 2rem 1rem;
 }
 
 .text-muted-debian {
     color: var(--text-muted);
+}
+
+/* Sidebar (navigation par service) */
+
+.sidebar {
+    width: 240px;
+    min-height: 100vh;
+    background-color: var(--surface);
+    border-right: 1px solid var(--border);
+}
+
+.sidebar-brand {
+    color: var(--debian-red);
+    font-weight: 700;
+    text-decoration: none;
+    font-size: 1.1rem;
+}
+
+.sidebar-section-title {
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    margin-bottom: 0.5rem;
+}
+
+.sidebar-link {
+    display: block;
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.25rem;
+    color: var(--text);
+    text-decoration: none;
+    margin-bottom: 0.25rem;
+}
+
+.sidebar-link:hover {
+    background-color: var(--bg);
+    color: var(--debian-red);
+}
+
+.sidebar-link.active {
+    background-color: var(--debian-red);
+    color: #fff;
+}
+
+.sidebar-link.disabled {
+    color: var(--text-muted);
+    cursor: default;
+}
+
+.sidebar-link.disabled:hover {
+    background-color: transparent;
+    color: var(--text-muted);
+}
+
+.topbar {
+    background-color: var(--surface);
+    border-bottom: 1px solid var(--border);
+}
+
+.min-w-0 {
+    min-width: 0;
 }

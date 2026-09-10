@@ -15,8 +15,8 @@ class ImportMvolaForm(forms.Form):
         return fichier
 
 
-class ImportPamfForm(forms.Form):
-    date_requete = forms.DateField(
-        label='Date a interroger',
+class RapprochementForm(forms.Form):
+    date = forms.DateField(
+        label='Date a rapprocher',
         widget=forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
     )

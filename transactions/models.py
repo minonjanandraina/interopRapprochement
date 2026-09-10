@@ -102,3 +102,65 @@ class TransactionPamf(models.Model):
 
     def __str__(self):
         return self.transid_mvola
+
+
+class Rapprochement(models.Model):
+    """Un process de reconciliation MVOLA / PAMF pour une date donnee.
+
+    Declenche manuellement par date (cf. CLAUDE.md - Decisions prises). Un seul enregistrement
+    par date : relancer le rapprochement met a jour ce meme enregistrement (recalcul complet).
+    """
+
+    class Statut(models.TextChoices):
+        EN_COURS = 'EN_COURS', 'En cours'
+        TERMINE = 'TERMINE', 'Termine'
+        ECHEC = 'ECHEC', 'Echec'
+
+    date = models.DateField(unique=True)
+    statut = models.CharField(max_length=10, choices=Statut.choices, default=Statut.EN_COURS)
+    lance_par = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name='rapprochements',
+    )
+    cree_le = models.DateTimeField(auto_now_add=True)
+    execute_le = models.DateTimeField(auto_now=True)
+    nb_mvola = models.PositiveIntegerField(default=0)
+    nb_pamf = models.PositiveIntegerField(default=0)
+    nb_success = models.PositiveIntegerField(default=0)
+    nb_orphelines_mvola = models.PositiveIntegerField(default=0)
+    nb_orphelines_pamf = models.PositiveIntegerField(default=0)
+    message_erreur = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ['-date']
+
+    def __str__(self):
+        return f'Rapprochement {self.date} ({self.statut})'
+
+
+class ResultatRapprochement(models.Model):
+    """Statut d'une transaction (identifiee par TRANSID_MVOLA) pour un rapprochement donne."""
+
+    class Statut(models.TextChoices):
+        SUCCESS = 'SUCCESS', 'Rapprochee'
+        ORPHELINE_MVOLA = 'ORPHELINE_MVOLA', 'Orpheline MVOLA'
+        ORPHELINE_PAMF = 'ORPHELINE_PAMF', 'Orpheline PAMF'
+
+    rapprochement = models.ForeignKey(Rapprochement, on_delete=models.CASCADE, related_name='resultats')
+    transid_mvola = models.CharField(max_length=50, db_index=True)
+    statut = models.CharField(max_length=20, choices=Statut.choices)
+    transaction_mvola = models.ForeignKey(
+        TransactionMvola, null=True, blank=True, on_delete=models.SET_NULL, related_name='resultats',
+    )
+    transaction_pamf = models.ForeignKey(
+        TransactionPamf, null=True, blank=True, on_delete=models.SET_NULL, related_name='resultats',
+    )
+
+    class Meta:
+        ordering = ['transid_mvola']
+        constraints = [
+            models.UniqueConstraint(fields=['rapprochement', 'transid_mvola'], name='unique_resultat_par_transid'),
+        ]
+        indexes = [models.Index(fields=['statut'])]
+
+    def __str__(self):
+        return f'{self.transid_mvola} - {self.statut}'

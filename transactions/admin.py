@@ -1,6 +1,13 @@
 from django.contrib import admin
 
-from .models import ImportFichierMvola, ImportRequetePamf, TransactionMvola, TransactionPamf
+from .models import (
+    ImportFichierMvola,
+    ImportRequetePamf,
+    Rapprochement,
+    ResultatRapprochement,
+    TransactionMvola,
+    TransactionPamf,
+)
 
 
 @admin.register(ImportFichierMvola)
@@ -29,3 +36,18 @@ class TransactionPamfAdmin(admin.ModelAdmin):
     list_display = ('transid_mvola', 'posting_date', 'r_autotransaction_id', 'time')
     search_fields = ('transid_mvola', 'r_autotransaction_id')
     date_hierarchy = 'posting_date'
+
+
+@admin.register(Rapprochement)
+class RapprochementAdmin(admin.ModelAdmin):
+    list_display = ('date', 'statut', 'nb_mvola', 'nb_pamf', 'nb_success',
+                     'nb_orphelines_mvola', 'nb_orphelines_pamf', 'lance_par', 'execute_le')
+    list_filter = ('statut',)
+    date_hierarchy = 'date'
+
+
+@admin.register(ResultatRapprochement)
+class ResultatRapprochementAdmin(admin.ModelAdmin):
+    list_display = ('transid_mvola', 'rapprochement', 'statut')
+    list_filter = ('statut',)
+    search_fields = ('transid_mvola',)

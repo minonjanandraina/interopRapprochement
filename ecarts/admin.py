@@ -1,3 +1,11 @@
 from django.contrib import admin
 
-# Register your models here.
+from .models import Ecart
+
+
+@admin.register(Ecart)
+class EcartAdmin(admin.ModelAdmin):
+    list_display = ('transid_mvola', 'type_ecart', 'date_transaction', 'statut', 'detecte_le')
+    list_filter = ('type_ecart', 'statut', 'date_transaction')
+    search_fields = ('transid_mvola',)
+    date_hierarchy = 'date_transaction'

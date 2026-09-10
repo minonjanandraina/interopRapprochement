@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+
+{% block title %}Rapprochement MVOLA - interopRapprochement{% endblock %}
+
+{% block content %}
+<h1 class="h4 mb-3">Rapprochement MVOLA</h1>
+{% include "transactions/_mvola_tabs.html" %}
+
+<div class="card p-4">
+    <h2 class="h5 mb-4">Lancer un rapprochement</h2>
+    <form method="post" novalidate>
+        {% csrf_token %}
+        <div class="mb-3">
+            <label for="{{ form.date.id_for_label }}" class="form-label">{{ form.date.label }}</label>
+            {{ form.date }}
+            {% for error in form.date.errors %}
+                <div class="text-danger small">{{ error }}</div>
+            {% endfor %}
+        </div>
+        <button type="submit" class="btn btn-debian">Lancer le rapprochement</button>
+    </form>
+</div>
+
+<div class="card p-4 mt-4">
+    <h2 class="h5 mb-3">Historique des rapprochements</h2>
+    {% if historique %}
+    <div class="table-responsive">
+        <table class="table table-sm align-middle">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Statut</th>
+                    <th>MVOLA</th>
+                    <th>PAMF</th>
+                    <th>Rapprochees</th>
+                    <th>Orph. MVOLA</th>
+                    <th>Orph. PAMF</th>
+                    <th>Execute par</th>
+                    <th>Le</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in historique %}
+                <tr>
+                    <td>{{ r.date }}</td>
+                    <td>
+                        {% if r.statut == 'TERMINE' %}
+                            <span class="badge text-bg-success">{{ r.get_statut_display }}</span>
+                        {% elif r.statut == 'ECHEC' %}
+                            <span class="badge text-bg-danger" title="{{ r.message_erreur }}">{{ r.get_statut_display }}</span>
+                        {% else %}
+                            <span class="badge text-bg-secondary">{{ r.get_statut_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ r.nb_mvola }}</td>
+                    <td>{{ r.nb_pamf }}</td>
+                    <td>{{ r.nb_success }}</td>
+                    <td>{{ r.nb_orphelines_mvola }}</td>
+                    <td>{{ r.nb_orphelines_pamf }}</td>
+                    <td>{{ r.lance_par }}</td>
+                    <td>{{ r.execute_le }}</td>
+                    <td>
+                        <button type="button" class="btn btn-sm btn-outline-secondary"
+                                data-bs-toggle="modal" data-bs-target="#rapprochementModal"
+                                hx-get="{% url 'transactions:mvola_rapprochement_detail' r.pk %}"
+                                hx-target="#rapprochementModalContent">
+                            Details
+                        </button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="text-muted-debian mb-0">Aucun rapprochement pour le moment.</p>
+    {% endif %}
+</div>
+
+<div class="modal fade" id="rapprochementModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content" id="rapprochementModalContent">
+            <div class="modal-body text-muted-debian">Chargement...</div>
+        </div>
+    </div>
+</div>
+{% endblock %}

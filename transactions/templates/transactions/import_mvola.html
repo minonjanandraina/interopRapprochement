@@ -1,10 +1,13 @@
 {% extends "base.html" %}
 
-{% block title %}Import CSV MVOLA - interopRapprochement{% endblock %}
+{% block title %}Import MVOLA - interopRapprochement{% endblock %}
 
 {% block content %}
-<div class="card p-4 mt-3">
-    <h1 class="h4 mb-4">Import du fichier MVOLA</h1>
+<h1 class="h4 mb-3">Rapprochement MVOLA</h1>
+{% include "transactions/_mvola_tabs.html" %}
+
+<div class="card p-4">
+    <h2 class="h5 mb-4">Import du fichier MVOLA</h2>
     <form method="post" enctype="multipart/form-data" novalidate>
         {% csrf_token %}
         <div class="mb-3">
