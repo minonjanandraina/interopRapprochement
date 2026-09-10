@@ -39,6 +39,16 @@ class Ecart(models.Model):
         vs ticket Aspekt, deduit du statut PAMF is_success)."""
         return self.resultat.action_recommandee
 
+    @property
+    def montant(self):
+        """Montant de la transaction MVOLA associee (source 1, cf. CLAUDE.md).
+
+        La requete CBS ne remonte pas de montant cote PAMF : pour une ORPHELINE_PAMF
+        (transaction_mvola absente), aucun montant n'est disponible dans nos donnees.
+        """
+        transaction_mvola = self.resultat.transaction_mvola
+        return transaction_mvola.amount if transaction_mvola else None
+
 
 class EcartHistorique(models.Model):
     """Journal des actions de traitement sur un ecart : qui, quand, quelle action."""

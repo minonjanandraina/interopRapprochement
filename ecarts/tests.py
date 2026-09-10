@@ -1,4 +1,5 @@
 from datetime import date
+from decimal import Decimal
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -52,6 +53,28 @@ class ListeEcartViewTests(TestCase):
 
         resp2 = self.client.get('/ecarts/mvola/ecarts/', {'type_ecart': 'ORPHELINE_PAMF'})
         self.assertNotContains(resp2, '222')
+
+    def test_affiche_le_montant_de_la_transaction_mvola(self):
+        ecart = Ecart.objects.get(transid_mvola='222')
+        self.assertEqual(ecart.montant, Decimal('299600.00'))
+
+        resp = self.client.get('/ecarts/mvola/ecarts/')
+        self.assertContains(resp, '299600')
+
+    def test_orpheline_pamf_na_pas_de_montant(self):
+        """La requete CBS ne remonte pas de montant : rien a afficher pour une ORPHELINE_PAMF."""
+        with patch('transactions.services_pamf.fetch_transactions_pamf') as mock_fetch:
+            mock_fetch.return_value = [
+                {'rAutotransactionID': 1, 'postingDate': date(2026, 9, 7), 'Time': '00:00:00',
+                 'Note': '', 'TRANSID_MVOLA': '111', 'responseBody': ''},
+                {'rAutotransactionID': 2, 'postingDate': date(2026, 9, 7), 'Time': '00:00:00',
+                 'Note': '', 'TRANSID_MVOLA': '999', 'responseBody': ''},
+            ]
+            lancer_rapprochement(date(2026, 9, 7), self.user)
+
+        ecart_pamf = Ecart.objects.get(transid_mvola='999')
+        self.assertEqual(ecart_pamf.type_ecart, Ecart.TypeEcart.ORPHELINE_PAMF)
+        self.assertIsNone(ecart_pamf.montant)
 
 
 class DetailEcartViewTests(TestCase):

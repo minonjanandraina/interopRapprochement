@@ -1,7 +1,7 @@
 <div class="table-responsive">
     <table class="table table-sm table-striped">
         <thead>
-            <tr><th>TRANSID</th><th>Date</th><th>Type</th><th>Action recommandee</th><th>Statut</th><th>Detecte le</th><th></th></tr>
+            <tr><th>TRANSID</th><th>Date</th><th>Type</th><th>Montant</th><th>Action recommandee</th><th>Statut</th><th>Detecte le</th><th></th></tr>
         </thead>
         <tbody>
             {% for e in page_obj %}
@@ -13,6 +13,7 @@
                         {{ e.get_type_ecart_display }}
                     </span>
                 </td>
+                <td>{% if e.montant is not None %}{{ e.montant }}{% else %}<span class="text-muted-debian">-</span>{% endif %}</td>
                 <td>
                     {% if e.action_recommandee %}
                     <span class="badge {% if e.action_recommandee == 'ROLLBACK_MVOLA' %}text-bg-danger{% else %}text-bg-warning{% endif %}">
@@ -31,7 +32,7 @@
                 <td><a href="{% url 'ecarts:detail' e.pk %}" class="btn btn-sm btn-outline-secondary">Details</a></td>
             </tr>
             {% empty %}
-            <tr><td colspan="7" class="text-muted-debian">Aucun ecart.</td></tr>
+            <tr><td colspan="8" class="text-muted-debian">Aucun ecart.</td></tr>
             {% endfor %}
         </tbody>
     </table>
