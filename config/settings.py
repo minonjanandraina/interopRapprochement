@@ -41,6 +41,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -123,6 +124,19 @@ USE_TZ = True
 STATIC_URL = 'static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+# WhiteNoise sert les fichiers statiques directement depuis l'app WSGI (utile ici :
+# pas de nginx/reverse proxy devant le serveur prod pour l'instant). Necessite
+# `python manage.py collectstatic` avant chaque deploiement (fichiers lus depuis
+# STATIC_ROOT, pas STATICFILES_DIRS).
+STORAGES = {
+    'default': {
+        'BACKEND': 'django.core.files.storage.FileSystemStorage',
+    },
+    'staticfiles': {
+        'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
+    },
+}
 
 # Fichiers uploades (CSV MVOLA, pieces jointes de regularisation)
 MEDIA_URL = 'media/'
