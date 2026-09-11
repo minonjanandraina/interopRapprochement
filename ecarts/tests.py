@@ -9,10 +9,19 @@ from django.test import Client, TestCase
 from transactions.csv_mvola import importer_fichier_mvola
 from transactions.services_rapprochement import lancer_rapprochement
 from transactions.tests import make_csv, make_row
+from user import privileges
+from user.models import Permission, Role
 
 from .models import Ecart, EcartHistorique
 
 User = get_user_model()
+
+
+def grant_privilege(user, code):
+    permission = Permission.objects.get(code=code)
+    role = Role.objects.create(name=f'role-{code}-{user.pk}')
+    role.permissions.add(permission)
+    user.roles.add(role)
 
 
 class ListeEcartViewTests(TestCase):
@@ -76,10 +85,31 @@ class ListeEcartViewTests(TestCase):
         self.assertEqual(ecart_pamf.type_ecart, Ecart.TypeEcart.ORPHELINE_PAMF)
         self.assertIsNone(ecart_pamf.montant)
 
+    def test_export_excel_respecte_le_filtre_de_statut(self):
+        resp = self.client.get('/ecarts/mvola/ecarts/export/excel/', {'statut': 'DETECTE'})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(
+            resp['Content-Type'],
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        )
+        self.assertIn('ecarts_mvola.xlsx', resp['Content-Disposition'])
+
+    def test_export_pdf(self):
+        resp = self.client.get('/ecarts/mvola/ecarts/export/pdf/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp['Content-Type'], 'application/pdf')
+        self.assertIn('ecarts_mvola.pdf', resp['Content-Disposition'])
+
+    def test_entete_de_rapport_affiche_les_filtres_et_le_total(self):
+        resp = self.client.get('/ecarts/mvola/ecarts/', {'type_ecart': 'ORPHELINE_MVOLA'})
+        self.assertContains(resp, 'Type = Orpheline MVOLA')
+        self.assertContains(resp, '1 ligne')
+
 
 class DetailEcartViewTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username='op', email='op@example.com', password='x')
+        grant_privilege(self.user, privileges.TRAITER_ECARTS)
         self.client = Client()
         self.client.force_login(self.user)
 
@@ -161,6 +191,7 @@ class DetailEcartViewTests(TestCase):
 class TicketAspektViewTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username='op', email='op@example.com', password='x')
+        grant_privilege(self.user, privileges.TRAITER_ECARTS)
         self.client = Client()
         self.client.force_login(self.user)
 

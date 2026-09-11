@@ -1,0 +1,42 @@
+<html>
+<head>
+<style>
+    @page { size: A4 landscape; margin: 1.5cm; }
+    body { font-family: Helvetica, sans-serif; font-size: 9px; color: #23211f; }
+    h1 { font-size: 15px; color: #a81d33; margin-bottom: 4px; }
+    .entete { margin-bottom: 10px; }
+    .entete div { margin-bottom: 2px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+    th, td { border: 1px solid #999; padding: 3px 5px; text-align: left; }
+    th { background-color: #eee; }
+</style>
+</head>
+<body>
+<h1>{{ meta.titre }}</h1>
+<div class="entete">
+    <div><strong>Module source :</strong> {{ meta.module_source }}</div>
+    <div>
+        <strong>Filtres appliques :</strong>
+        {% if meta.filtres %}
+            {% for label, valeur in meta.filtres %}{{ label }} = {{ valeur }}{% if not forloop.last %}, {% endif %}{% endfor %}
+        {% else %}
+            aucun
+        {% endif %}
+    </div>
+    <div><strong>Nombre de lignes :</strong> {{ meta.nb_lignes }}</div>
+    <div><strong>Genere par</strong> {{ meta.genere_par }} <strong>le</strong> {{ meta.genere_le|date:"d/m/Y H:i" }}</div>
+</div>
+<table>
+    <thead>
+        <tr>{% for label in colonnes_labels %}<th>{{ label }}</th>{% endfor %}</tr>
+    </thead>
+    <tbody>
+        {% for ligne in lignes %}
+        <tr>{% for valeur in ligne %}<td>{{ valeur|default_if_none:"-" }}</td>{% endfor %}</tr>
+        {% empty %}
+        <tr><td colspan="{{ colonnes_labels|length }}">Aucune donnee.</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+</body>
+</html>

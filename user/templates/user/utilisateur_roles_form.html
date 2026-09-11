@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block title %}Roles de {{ utilisateur }} - interopRapprochement{% endblock %}
+
+{% block content %}
+<h1 class="h4 mb-3">Roles de {{ utilisateur }}</h1>
+
+<div class="card p-4">
+    <form method="post">
+        {% csrf_token %}
+        <div class="mb-3">
+            {% for checkbox in form.roles %}
+            <div class="form-check">
+                {{ checkbox.tag }}
+                <label class="form-check-label" for="{{ checkbox.id_for_label }}">{{ checkbox.choice_label }}</label>
+            </div>
+            {% empty %}
+            <p class="text-muted-debian mb-0">
+                Aucun role n'existe encore. <a href="{% url 'user:role_creer' %}">Creer un role</a>.
+            </p>
+            {% endfor %}
+        </div>
+        <button type="submit" class="btn btn-debian">Enregistrer</button>
+        <a href="{% url 'user:utilisateurs_liste' %}" class="btn btn-outline-secondary">Annuler</a>
+    </form>
+</div>
+{% endblock %}

@@ -1,0 +1,18 @@
+<div class="rapport-entete d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3 p-2 border rounded small">
+    <div class="text-muted-debian">
+        <div><strong>{{ meta.titre }}</strong> - source : {{ meta.module_source }}</div>
+        <div>
+            Filtres appliques :
+            {% if meta.filtres %}
+                {% for label, valeur in meta.filtres %}{{ label }} = {{ valeur }}{% if not forloop.last %}, {% endif %}{% endfor %}
+            {% else %}
+                aucun
+            {% endif %}
+        </div>
+        <div>{{ meta.nb_lignes }} ligne{{ meta.nb_lignes|pluralize }} &middot; genere par {{ meta.genere_par }} le {{ meta.genere_le|date:"d/m/Y H:i" }}</div>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{{ meta.export_excel_url }}" class="btn btn-outline-secondary btn-sm">Export Excel</a>
+        <a href="{{ meta.export_pdf_url }}" class="btn btn-outline-secondary btn-sm">Export PDF</a>
+    </div>
+</div>

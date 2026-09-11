@@ -13,6 +13,13 @@ urlpatterns = [
         views.mvola_rapprochement_lignes,
         name='mvola_rapprochement_lignes',
     ),
+    path(
+        'mvola/rapprochement/<int:pk>/lignes/<str:type_donnee>/export/<str:format>/',
+        views.mvola_rapprochement_lignes_export,
+        name='mvola_rapprochement_lignes_export',
+    ),
     path('mvola/transactions/', views.mvola_liste_transactions, name='mvola_liste_transactions'),
+    path('mvola/transactions/export/<str:format>/', views.mvola_liste_transactions_export, name='mvola_liste_transactions_export'),
     path('mvola/pamf/', views.mvola_liste_pamf, name='mvola_liste_pamf'),
+    path('mvola/pamf/export/<str:format>/', views.mvola_liste_pamf_export, name='mvola_liste_pamf_export'),
 ]

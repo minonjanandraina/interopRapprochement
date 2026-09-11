@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block title %}Utilisateurs - interopRapprochement{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h4 mb-0">Utilisateurs</h1>
+    <a href="{% url 'user:utilisateur_creer' %}" class="btn btn-debian btn-sm">Nouvel utilisateur</a>
+</div>
+
+<div class="card p-3">
+    {% if utilisateurs %}
+    <div class="table-responsive">
+        <table class="table table-sm align-middle">
+            <thead>
+                <tr>
+                    <th>Utilisateur</th>
+                    <th>Email</th>
+                    <th>Statut</th>
+                    <th>Roles</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for utilisateur in utilisateurs %}
+                <tr>
+                    <td>
+                        {{ utilisateur.username }}
+                        {% if utilisateur.is_superuser %}<span class="badge text-bg-secondary">superuser</span>{% endif %}
+                    </td>
+                    <td>{{ utilisateur.email }}</td>
+                    <td>
+                        {% if utilisateur.is_active %}
+                        <span class="badge text-bg-success">Actif</span>
+                        {% else %}
+                        <span class="badge text-bg-danger">Desactive</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% for role in utilisateur.roles.all %}
+                        <span class="badge text-bg-secondary">{{ role.name }}</span>
+                        {% empty %}
+                        <span class="text-muted-debian small">aucun</span>
+                        {% endfor %}
+                    </td>
+                    <td class="text-end text-nowrap">
+                        <a href="{% url 'user:utilisateur_roles' utilisateur.pk %}" class="btn btn-outline-secondary btn-sm">
+                            Roles
+                        </a>
+                        <a href="{% url 'user:utilisateur_changer_mot_de_passe' utilisateur.pk %}" class="btn btn-outline-secondary btn-sm">
+                            Mot de passe
+                        </a>
+                        {% if utilisateur != request.user %}
+                        <form method="post" action="{% url 'user:utilisateur_toggle_actif' utilisateur.pk %}" class="d-inline">
+                            {% csrf_token %}
+                            {% if utilisateur.is_active %}
+                            <button type="submit" class="btn btn-outline-danger btn-sm">Desactiver</button>
+                            {% else %}
+                            <button type="submit" class="btn btn-outline-success btn-sm">Activer</button>
+                            {% endif %}
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="text-muted-debian mb-0">Aucun utilisateur.</p>
+    {% endif %}
+</div>
+{% endblock %}

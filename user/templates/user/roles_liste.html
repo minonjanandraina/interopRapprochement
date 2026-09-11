@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block title %}Roles - interopRapprochement{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h4 mb-0">Roles</h1>
+    <a href="{% url 'user:role_creer' %}" class="btn btn-debian btn-sm">Nouveau role</a>
+</div>
+
+<div class="card p-3">
+    {% if roles %}
+    <div class="table-responsive">
+        <table class="table table-sm align-middle">
+            <thead>
+                <tr>
+                    <th>Nom</th>
+                    <th>Description</th>
+                    <th>Privileges</th>
+                    <th>Utilisateurs</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for role in roles %}
+                <tr>
+                    <td>{{ role.name }}</td>
+                    <td class="text-muted-debian small">{{ role.description|default:"-" }}</td>
+                    <td>
+                        {% for permission in role.permissions.all %}
+                        <span class="badge text-bg-secondary">{{ permission.label }}</span>
+                        {% empty %}
+                        <span class="text-muted-debian small">aucun</span>
+                        {% endfor %}
+                    </td>
+                    <td>{{ role.users.count }}</td>
+                    <td class="text-end">
+                        <a href="{% url 'user:role_modifier' role.pk %}" class="btn btn-outline-secondary btn-sm">Modifier</a>
+                        <a href="{% url 'user:role_supprimer' role.pk %}" class="btn btn-outline-danger btn-sm">Supprimer</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="text-muted-debian mb-0">Aucun role pour le moment.</p>
+    {% endif %}
+</div>
+{% endblock %}

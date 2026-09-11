@@ -469,3 +469,97 @@ class ListePamfViewTests(TestCase):
         resp2 = self.client.get('/transactions/mvola/pamf/', {'transid_mvola': '111'})
         self.assertContains(resp2, '111')
         self.assertNotContains(resp2, '222')
+
+
+class ExportListesTests(TestCase):
+    """Export Excel/PDF des 3 listes de consultation : respecte les filtres, toutes les lignes."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='op', email='op@example.com', password='x')
+        self.client = Client()
+        self.client.force_login(self.user)
+        fichier = make_csv('2026-09-07_reporting_PAMF.csv', [
+            make_row(transid='111', msisdn='0341111111', nom='Alice', type_operation='WTB'),
+            make_row(transid='222', msisdn='0342222222', nom='Bob', type_operation='BTW'),
+        ])
+        importer_fichier_mvola(fichier, self.user)
+        with patch('transactions.services_pamf.fetch_transactions_pamf') as mock_fetch:
+            mock_fetch.return_value = [
+                {'rAutotransactionID': 1, 'postingDate': date(2026, 9, 7), 'Time': '00:00:00',
+                 'Note': '', 'TRANSID_MVOLA': '111', 'responseBody': ''},
+            ]
+            importer_transactions_pamf(date(2026, 9, 7), self.user)
+
+    def test_export_excel_mvola_respecte_le_filtre(self):
+        resp = self.client.get('/transactions/mvola/transactions/export/excel/', {'msisdn': '0341111111'})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(
+            resp['Content-Type'],
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        )
+        self.assertIn('transactions_mvola.xlsx', resp['Content-Disposition'])
+
+    def test_export_pdf_mvola_respecte_le_filtre(self):
+        resp = self.client.get('/transactions/mvola/transactions/export/pdf/', {'msisdn': '0341111111'})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp['Content-Type'], 'application/pdf')
+        self.assertIn('transactions_mvola.pdf', resp['Content-Disposition'])
+
+    def test_export_excel_pamf(self):
+        resp = self.client.get('/transactions/mvola/pamf/export/excel/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn('transactions_pamf.xlsx', resp['Content-Disposition'])
+
+    def test_export_pdf_pamf(self):
+        resp = self.client.get('/transactions/mvola/pamf/export/pdf/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn('transactions_pamf.pdf', resp['Content-Disposition'])
+
+    def test_format_export_inconnu_renvoie_404(self):
+        resp = self.client.get('/transactions/mvola/transactions/export/csv/')
+        self.assertEqual(resp.status_code, 404)
+
+    def test_entete_de_rapport_affiche_les_filtres_et_le_total(self):
+        resp = self.client.get('/transactions/mvola/transactions/', {'msisdn': '0341111111'})
+        self.assertContains(resp, 'MSISDN = 0341111111')
+        self.assertContains(resp, '1 ligne')
+        self.assertContains(resp, 'op')
+
+
+class RapprochementLignesViewTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='op', email='op@example.com', password='x')
+        self.client = Client()
+        self.client.force_login(self.user)
+        fichier = make_csv('2026-09-07_reporting_PAMF.csv', [make_row(transid='111'), make_row(transid='222')])
+        importer_fichier_mvola(fichier, self.user)
+        with patch('transactions.services_pamf.fetch_transactions_pamf') as mock_fetch:
+            mock_fetch.return_value = [
+                {'rAutotransactionID': 1, 'postingDate': date(2026, 9, 7), 'Time': '00:00:00',
+                 'Note': '', 'TRANSID_MVOLA': '111', 'responseBody': ''},
+            ]
+            self.rapprochement = lancer_rapprochement(date(2026, 9, 7), self.user)
+
+    def test_lignes_mvola_affiche_lentete_et_le_tableau(self):
+        resp = self.client.get(
+            f'/transactions/mvola/rapprochement/{self.rapprochement.pk}/lignes/mvola/',
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, '111')
+        self.assertContains(resp, '222')
+
+    def test_export_excel_orphelines(self):
+        resp = self.client.get(
+            f'/transactions/mvola/rapprochement/{self.rapprochement.pk}/lignes/orphelines/export/excel/',
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(
+            f'rapprochement_{self.rapprochement.date.isoformat()}_orphelines.xlsx', resp['Content-Disposition'],
+        )
+
+    def test_export_pdf_pamf_du_rapprochement(self):
+        resp = self.client.get(
+            f'/transactions/mvola/rapprochement/{self.rapprochement.pk}/lignes/pamf/export/pdf/',
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp['Content-Type'], 'application/pdf')

@@ -6,6 +6,7 @@ app_name = 'ecarts'
 
 urlpatterns = [
     path('mvola/ecarts/', views.mvola_liste, name='mvola_liste'),
+    path('mvola/ecarts/export/<str:format>/', views.mvola_liste_export, name='mvola_liste_export'),
     path('mvola/ecarts/<int:pk>/', views.detail, name='detail'),
     path('mvola/ecarts/<int:pk>/commentaire/', views.ajouter_commentaire_vue, name='ajouter_commentaire'),
     path('mvola/ecarts/<int:pk>/statut/', views.changer_statut_vue, name='changer_statut'),

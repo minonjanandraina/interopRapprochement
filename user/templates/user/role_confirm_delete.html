@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block title %}Supprimer un role - interopRapprochement{% endblock %}
+
+{% block content %}
+<h1 class="h4 mb-3">Supprimer le role "{{ role.name }}"</h1>
+
+<div class="card p-4">
+    {% if nb_utilisateurs %}
+    <p class="text-danger">
+        Impossible de supprimer ce role : il est encore assigne a {{ nb_utilisateurs }} utilisateur(s).
+        Retirez-le de ces utilisateurs avant de le supprimer.
+    </p>
+    <a href="{% url 'user:roles_liste' %}" class="btn btn-outline-secondary">Retour</a>
+    {% else %}
+    <p>Confirmez-vous la suppression definitive du role "{{ role.name }}" ?</p>
+    <form method="post">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-danger">Supprimer</button>
+        <a href="{% url 'user:roles_liste' %}" class="btn btn-outline-secondary">Annuler</a>
+    </form>
+    {% endif %}
+</div>
+{% endblock %}

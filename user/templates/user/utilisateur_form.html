@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block title %}Nouvel utilisateur - interopRapprochement{% endblock %}
+
+{% block content %}
+<h1 class="h4 mb-3">Nouvel utilisateur</h1>
+
+<div class="card p-4">
+    <form method="post" novalidate>
+        {% csrf_token %}
+        {% for field in form %}
+            {% if field.name != 'roles' %}
+            <div class="mb-3">
+                <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
+                {{ field }}
+                {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+                {% for error in field.errors %}
+                    <div class="text-danger small">{{ error }}</div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        {% endfor %}
+        <div class="mb-3">
+            <label class="form-label d-block">{{ form.roles.label }}</label>
+            {% for checkbox in form.roles %}
+            <div class="form-check">
+                {{ checkbox.tag }}
+                <label class="form-check-label" for="{{ checkbox.id_for_label }}">{{ checkbox.choice_label }}</label>
+            </div>
+            {% empty %}
+            <p class="text-muted-debian small mb-0">Aucun role n'existe encore.</p>
+            {% endfor %}
+        </div>
+        <button type="submit" class="btn btn-debian">Creer</button>
+        <a href="{% url 'user:utilisateurs_liste' %}" class="btn btn-outline-secondary">Annuler</a>
+    </form>
+</div>
+{% endblock %}
