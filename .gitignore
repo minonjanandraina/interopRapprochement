@@ -16,6 +16,7 @@ staticfiles/
 
 # Secrets
 .env
+.env.*
 
 # Data d'entree (fichiers reels, non versionnes)
 input/*.csv
