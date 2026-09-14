@@ -10,6 +10,7 @@ LANCER_RAPPROCHEMENT = 'lancer_rapprochement'
 TRAITER_ECARTS = 'traiter_ecarts'
 GERER_ROLES = 'gerer_roles'
 GERER_UTILISATEURS = 'gerer_utilisateurs'
+VUE_ONLY = 'vue_only'
 
 PRIVILEGE_CHOICES = [
     (IMPORTER_CSV_MVOLA, 'Importer un fichier CSV MVOLA'),
@@ -17,4 +18,5 @@ PRIVILEGE_CHOICES = [
     (TRAITER_ECARTS, 'Traiter les ecarts (statut, commentaire, piece jointe, rollback, ticket Aspekt)'),
     (GERER_ROLES, 'Gerer les roles et privileges'),
     (GERER_UTILISATEURS, 'Gerer les utilisateurs (assignation de roles)'),
+    (VUE_ONLY, 'Consultation seule'),
 ]

@@ -5,6 +5,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from core import reports
 from core.htmx import is_htmx_request
 from core.pagination import paginate
+from transactions.models import ResultatRapprochement
 from user import privileges
 from user.decorators import privilege_required
 
@@ -51,6 +52,16 @@ def _filtrer_ecarts(request):
             queryset = queryset.filter(type_ecart=data['type_ecart'])
         if data['statut']:
             queryset = queryset.filter(statut=data['statut'])
+        if data['action_recommandee']:
+            # action_recommandee est une propriete calculee (cf. Ecart.action_recommandee /
+            # ResultatRapprochement.action_recommandee, CLAUDE.md), non stockee en base : on
+            # traduit le filtre en conditions equivalentes sur les champs reels plutot que de
+            # filtrer en Python, pour rester efficace en base (cf. philosophie bulk du moteur).
+            queryset = queryset.filter(type_ecart=Ecart.TypeEcart.ORPHELINE_MVOLA)
+            if data['action_recommandee'] == ResultatRapprochement.ActionRecommandee.TICKET_ASPEKT:
+                queryset = queryset.filter(resultat__transaction_pamf__isnull=False)
+            else:
+                queryset = queryset.filter(resultat__transaction_pamf__isnull=True)
     return queryset, form
 
 

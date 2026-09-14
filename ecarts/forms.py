@@ -1,5 +1,7 @@
 from django import forms
 
+from transactions.models import ResultatRapprochement
+
 from .models import Ecart
 
 
@@ -14,6 +16,11 @@ class FiltreEcartForm(forms.Form):
                                     widget=forms.Select(attrs={'class': 'form-select form-select-sm'}))
     statut = forms.ChoiceField(required=False, label='Statut', choices=[('', 'Tous')] + Ecart.Statut.choices,
                                 widget=forms.Select(attrs={'class': 'form-select form-select-sm'}))
+    action_recommandee = forms.ChoiceField(
+        required=False, label='Action recommandee',
+        choices=[('', 'Toutes')] + ResultatRapprochement.ActionRecommandee.choices,
+        widget=forms.Select(attrs={'class': 'form-select form-select-sm'}),
+    )
 
 
 class CommentaireForm(forms.Form):

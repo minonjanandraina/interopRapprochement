@@ -11,7 +11,14 @@ from django.views.generic import FormView
 
 from . import privileges
 from .decorators import privilege_required
-from .forms import AssignerRolesForm, DefinirMotDePasseForm, RegistrationForm, RoleForm, UtilisateurCreationForm
+from .forms import (
+    AssignerRolesForm,
+    ConnexionForm,
+    DefinirMotDePasseForm,
+    RegistrationForm,
+    RoleForm,
+    UtilisateurCreationForm,
+)
 from .models import Role, User
 from .tokens import account_activation_token
 
@@ -64,6 +71,7 @@ def activate(request, uidb64, token):
 
 class InteropLoginView(LoginView):
     template_name = 'user/login.html'
+    authentication_form = ConnexionForm
 
 
 class InteropLogoutView(LogoutView):
