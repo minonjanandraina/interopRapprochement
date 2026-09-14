@@ -31,7 +31,7 @@
                 {% endif %}
                 <div class="ms-auto d-flex align-items-center">
                     {% if user.is_authenticated %}
-                        <span class="text-muted-debian me-3">{{ user }}</span>
+                        <span class="text-muted-debian me-3">{{ user }} - {{ user.roles_display }}</span>
                         <form action="{% url 'user:logout' %}" method="post" class="d-inline">
                             {% csrf_token %}
                             <button type="submit" class="btn btn-outline-secondary btn-sm">Deconnexion</button>

@@ -47,6 +47,10 @@ class User(AbstractUser):
         return self.roles.filter(permissions__code=code).exists()
 
     @property
+    def roles_display(self):
+        return ', '.join(role.name for role in self.roles.all()) or '-'
+
+    @property
     def peut_gerer_roles(self):
         return self.has_privilege(PRIVILEGE_GERER_ROLES)
 
