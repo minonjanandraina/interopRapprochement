@@ -142,7 +142,14 @@
     });
 
     function toIso(d) {
-        return d.toISOString().slice(0, 10);
+        // Ne pas utiliser toISOString() : elle convertit en UTC, ce qui decale la date d'un
+        // jour en arriere sur un fuseau en avance sur UTC (ex. UTC+3) -> on formate a partir
+        // des composants locaux pour garder l'intervalle ferme sur les 2 bornes (Du et Au
+        // exactement tels que saisis).
+        const annee = d.getFullYear();
+        const mois = String(d.getMonth() + 1).padStart(2, '0');
+        const jour = String(d.getDate()).padStart(2, '0');
+        return annee + '-' + mois + '-' + jour;
     }
 
     function datesDeLaPlage(dateFrom, dateTo) {
