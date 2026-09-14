@@ -1,5 +1,6 @@
 <div class="sidebar-section-title">Services</div>
-<a class="sidebar-link {% if active_service == 'mvola' %}active{% endif %}" href="{% url 'transactions:mvola_import' %}">
+<a class="sidebar-link {% if active_service == 'mvola' %}active{% endif %}"
+   href="{% if user.peut_importer_csv_mvola %}{% url 'transactions:mvola_import' %}{% elif user.peut_lancer_rapprochement %}{% url 'transactions:mvola_rapprochement' %}{% else %}{% url 'transactions:mvola_liste_transactions' %}{% endif %}">
     MVOLA
 </a>
 <span class="sidebar-link disabled" title="Bientot disponible">
