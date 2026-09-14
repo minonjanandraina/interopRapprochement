@@ -15,11 +15,33 @@ class ImportMvolaForm(forms.Form):
         return fichier
 
 
+RAPPROCHEMENT_PLAGE_MAX_JOURS = 31
+
+
 class RapprochementForm(forms.Form):
-    date = forms.DateField(
-        label='Date a rapprocher',
+    date_from = forms.DateField(
+        label='Du',
         widget=forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
     )
+    date_to = forms.DateField(
+        label='Au',
+        widget=forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
+    )
+
+    def clean(self):
+        cleaned = super().clean()
+        date_from = cleaned.get('date_from')
+        date_to = cleaned.get('date_to')
+        if date_from and date_to:
+            if date_from > date_to:
+                raise forms.ValidationError("La date de debut doit etre anterieure ou egale a la date de fin.")
+            nb_jours = (date_to - date_from).days + 1
+            if nb_jours > RAPPROCHEMENT_PLAGE_MAX_JOURS:
+                raise forms.ValidationError(
+                    f"La plage ne peut pas depasser {RAPPROCHEMENT_PLAGE_MAX_JOURS} jours "
+                    f"(le moteur de rapprochement reste synchrone, cf. CLAUDE.md)."
+                )
+        return cleaned
 
 
 TYPE_OPERATION_CHOICES = [('', 'Tous'), ('WTB', 'WTB'), ('BTW', 'BTW')]

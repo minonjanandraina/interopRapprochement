@@ -18,10 +18,20 @@ from .models import (
     TransactionMvola,
     TransactionPamf,
 )
+from .forms import RapprochementForm
 from .services_pamf import importer_transactions_pamf
 from .services_rapprochement import CsvMvolaNonImporte, JourneeCbsNonTerminee, lancer_rapprochement
 
 User = get_user_model()
+
+
+def grant_privilege(user, code):
+    from user.models import Permission, Role
+
+    permission = Permission.objects.get(code=code)
+    role = Role.objects.create(name=f'role-{code}-{user.pk}')
+    role.permissions.add(permission)
+    user.roles.add(role)
 
 HEADER = (
     'DATE_TRANS;TRANSID_MVOLA;STATE;MSISDN;PIVOT;SENS;NOM;TRANSID_PARENT;'
@@ -697,3 +707,97 @@ class RapprochementLignesViewTests(TestCase):
         )
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp['Content-Type'], 'application/pdf')
+
+
+class RapprochementFormTests(TestCase):
+    def test_plage_valide(self):
+        form = RapprochementForm(data={'date_from': '2026-09-07', 'date_to': '2026-09-09'})
+        self.assertTrue(form.is_valid())
+
+    def test_date_from_apres_date_to_rejetee(self):
+        form = RapprochementForm(data={'date_from': '2026-09-09', 'date_to': '2026-09-07'})
+        self.assertFalse(form.is_valid())
+
+    def test_plage_trop_longue_rejetee(self):
+        form = RapprochementForm(data={'date_from': '2026-01-01', 'date_to': '2026-03-01'})
+        self.assertFalse(form.is_valid())
+
+
+class MvolaRapprochementLancerDateViewTests(TestCase):
+    """Endpoint AJAX appele par le navigateur, une date a la fois, pour piloter le modal de
+    progression sur une plage (cf. rapprochement_mvola.html)."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='op', email='op@example.com', password='x')
+        grant_privilege(self.user, 'lancer_rapprochement')
+        self.client = Client()
+        self.client.force_login(self.user)
+        self.patcher_derniere_activite = patch('transactions.services_rapprochement.fetch_derniere_activite')
+        self.mock_derniere_activite = self.patcher_derniere_activite.start()
+        self.mock_derniere_activite.return_value = journee_cbs_terminee(date(2026, 9, 7))
+        self.addCleanup(self.patcher_derniere_activite.stop)
+
+    def test_date_invalide_retourne_400(self):
+        resp = self.client.post('/transactions/mvola/rapprochement/lancer-date/', {'date': 'pas-une-date'})
+        self.assertEqual(resp.status_code, 400)
+        self.assertFalse(resp.json()['ok'])
+
+    def test_csv_non_importe_retourne_ok_false(self):
+        resp = self.client.post('/transactions/mvola/rapprochement/lancer-date/', {'date': '2026-09-07'})
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertFalse(data['ok'])
+        self.assertIn('pas encore ete importe', data['message'])
+        self.assertEqual(Rapprochement.objects.count(), 0)
+
+    @patch('transactions.services_pamf.fetch_transactions_pamf')
+    def test_succes_retourne_ok_true(self, mock_fetch):
+        fichier = make_csv('2026-09-07_reporting_PAMF.csv', [make_row(transid='111')])
+        importer_fichier_mvola(fichier, self.user)
+        mock_fetch.return_value = []
+
+        resp = self.client.post('/transactions/mvola/rapprochement/lancer-date/', {'date': '2026-09-07'})
+
+        data = resp.json()
+        self.assertTrue(data['ok'])
+        self.assertEqual(data['date'], '2026-09-07')
+        self.assertEqual(Rapprochement.objects.get(date=date(2026, 9, 7)).statut, Rapprochement.Statut.TERMINE)
+
+    def test_sans_privilege_refuse(self):
+        autre_user = User.objects.create_user(username='sans-droit', email='sd@example.com', password='x')
+        self.client.force_login(autre_user)
+
+        resp = self.client.post('/transactions/mvola/rapprochement/lancer-date/', {'date': '2026-09-07'})
+
+        self.assertEqual(resp.status_code, 403)
+
+
+class MvolaRapprochementPlageViewTests(TestCase):
+    """Fallback sans JS : soumission classique du formulaire, traite toute la plage d'un coup."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='op', email='op@example.com', password='x')
+        grant_privilege(self.user, 'lancer_rapprochement')
+        self.client = Client()
+        self.client.force_login(self.user)
+        self.patcher_derniere_activite = patch('transactions.services_rapprochement.fetch_derniere_activite')
+        self.mock_derniere_activite = self.patcher_derniere_activite.start()
+        self.mock_derniere_activite.return_value = journee_cbs_terminee(date(2026, 9, 9))
+        self.addCleanup(self.patcher_derniere_activite.stop)
+
+    @patch('transactions.services_pamf.fetch_transactions_pamf')
+    def test_lance_un_rapprochement_par_date_de_la_plage(self, mock_fetch):
+        for jour in ('07', '08', '09'):
+            fichier = make_csv(f'2026-09-{jour}_reporting_PAMF.csv', [make_row(transid=f't{jour}')])
+            importer_fichier_mvola(fichier, self.user)
+        mock_fetch.return_value = []
+
+        resp = self.client.post('/transactions/mvola/rapprochement/', {
+            'date_from': '2026-09-07', 'date_to': '2026-09-09',
+        }, follow=True)
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(Rapprochement.objects.count(), 3)
+        self.assertTrue(Rapprochement.objects.filter(date=date(2026, 9, 7)).exists())
+        self.assertTrue(Rapprochement.objects.filter(date=date(2026, 9, 8)).exists())
+        self.assertTrue(Rapprochement.objects.filter(date=date(2026, 9, 9)).exists())

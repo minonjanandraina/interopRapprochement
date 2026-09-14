@@ -1,7 +1,11 @@
+from datetime import datetime, timedelta
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.views.decorators.http import require_POST
 
 from core import reports
 from core.htmx import is_htmx_request
@@ -148,28 +152,41 @@ def mvola_import(request):
     })
 
 
+def _dates_de_la_plage(date_from, date_to):
+    nb_jours = (date_to - date_from).days + 1
+    return [date_from + timedelta(days=i) for i in range(nb_jours)]
+
+
+def _lancer_rapprochement_date(date_cible, user):
+    """Lance le rapprochement pour une date et retourne (ok, message), sans jamais lever
+    d'exception : utilise a la fois par le fallback sans JS et par l'endpoint AJAX par date."""
+    try:
+        rapprochement = lancer_rapprochement(date_cible, user)
+    except (CsvMvolaNonImporte, JourneeCbsNonTerminee) as exc:
+        return False, str(exc)
+
+    if rapprochement.statut == Rapprochement.Statut.ECHEC:
+        return False, f"Echec du rapprochement : {rapprochement.message_erreur}"
+
+    return True, (
+        f"Rapprochement du {date_cible.strftime('%d/%m/%Y')} termine : "
+        f"{rapprochement.nb_success} rapprochee(s), "
+        f"{rapprochement.nb_orphelines_mvola} orpheline(s) MVOLA, "
+        f"{rapprochement.nb_orphelines_pamf} orpheline(s) PAMF."
+    )
+
+
 @privilege_required(privileges.LANCER_RAPPROCHEMENT)
 def mvola_rapprochement(request):
     if request.method == 'POST':
         form = RapprochementForm(request.POST)
         if form.is_valid():
-            date_cible = form.cleaned_data['date']
-            try:
-                rapprochement = lancer_rapprochement(date_cible, request.user)
-            except (CsvMvolaNonImporte, JourneeCbsNonTerminee) as exc:
-                form.add_error('date', str(exc))
-            else:
-                if rapprochement.statut == Rapprochement.Statut.ECHEC:
-                    messages.error(request, f"Echec du rapprochement : {rapprochement.message_erreur}")
-                else:
-                    messages.success(
-                        request,
-                        f"Rapprochement du {date_cible.strftime('%d/%m/%Y')} termine : "
-                        f"{rapprochement.nb_success} rapprochee(s), "
-                        f"{rapprochement.nb_orphelines_mvola} orpheline(s) MVOLA, "
-                        f"{rapprochement.nb_orphelines_pamf} orpheline(s) PAMF."
-                    )
-                return redirect('transactions:mvola_rapprochement')
+            # Fallback sans JS : la plage est traitee sequentiellement dans la requete (pas de
+            # suivi "en cours"/"a suivre" en direct, cf. modal cote JS pour le cas normal).
+            for date_cible in _dates_de_la_plage(form.cleaned_data['date_from'], form.cleaned_data['date_to']):
+                ok, message = _lancer_rapprochement_date(date_cible, request.user)
+                (messages.success if ok else messages.error)(request, message)
+            return redirect('transactions:mvola_rapprochement')
     else:
         form = RapprochementForm()
 
@@ -177,6 +194,23 @@ def mvola_rapprochement(request):
     return render(request, 'transactions/rapprochement_mvola.html', {
         'form': form, 'historique': historique, 'active_tab': 'rapprochement', 'active_service': 'mvola',
     })
+
+
+@require_POST
+@privilege_required(privileges.LANCER_RAPPROCHEMENT)
+def mvola_rapprochement_lancer_date(request):
+    """Lance le rapprochement pour une seule date, appele en AJAX par le modal de lancement sur
+    une plage (cf. rapprochement_mvola.html) : le navigateur orchestre la sequence date par date
+    pour afficher une progression en direct, sans introduire de file d'attente serveur (le
+    moteur reste synchrone, cf. CLAUDE.md Sprint 5)."""
+    date_str = request.POST.get('date', '')
+    try:
+        date_cible = datetime.strptime(date_str, '%Y-%m-%d').date()
+    except ValueError:
+        return JsonResponse({'date': date_str, 'ok': False, 'message': 'Date invalide.'}, status=400)
+
+    ok, message = _lancer_rapprochement_date(date_cible, request.user)
+    return JsonResponse({'date': date_str, 'ok': ok, 'message': message})
 
 
 @login_required

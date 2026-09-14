@@ -7,6 +7,11 @@ app_name = 'transactions'
 urlpatterns = [
     path('mvola/import/', views.mvola_import, name='mvola_import'),
     path('mvola/rapprochement/', views.mvola_rapprochement, name='mvola_rapprochement'),
+    path(
+        'mvola/rapprochement/lancer-date/',
+        views.mvola_rapprochement_lancer_date,
+        name='mvola_rapprochement_lancer_date',
+    ),
     path('mvola/rapprochement/<int:pk>/detail/', views.mvola_rapprochement_detail, name='mvola_rapprochement_detail'),
     path(
         'mvola/rapprochement/<int:pk>/lignes/<str:type_donnee>/',

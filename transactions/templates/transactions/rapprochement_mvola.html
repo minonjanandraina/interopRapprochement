@@ -8,16 +8,30 @@
 
 <div class="card p-4">
     <h2 class="h5 mb-4">Lancer un rapprochement</h2>
-    <form method="post" novalidate>
+    <form method="post" novalidate id="lancementForm" data-lancer-url="{% url 'transactions:mvola_rapprochement_lancer_date' %}">
         {% csrf_token %}
-        <div class="mb-3">
-            <label for="{{ form.date.id_for_label }}" class="form-label">{{ form.date.label }}</label>
-            {{ form.date }}
-            {% for error in form.date.errors %}
-                <div class="text-danger small">{{ error }}</div>
-            {% endfor %}
+        {% for error in form.non_field_errors %}
+            <div class="text-danger small mb-2">{{ error }}</div>
+        {% endfor %}
+        <div class="row g-3 align-items-end">
+            <div class="col-6 col-md-3">
+                <label for="{{ form.date_from.id_for_label }}" class="form-label">{{ form.date_from.label }}</label>
+                {{ form.date_from }}
+                {% for error in form.date_from.errors %}
+                    <div class="text-danger small">{{ error }}</div>
+                {% endfor %}
+            </div>
+            <div class="col-6 col-md-3">
+                <label for="{{ form.date_to.id_for_label }}" class="form-label">{{ form.date_to.label }}</label>
+                {{ form.date_to }}
+                {% for error in form.date_to.errors %}
+                    <div class="text-danger small">{{ error }}</div>
+                {% endfor %}
+            </div>
+            <div class="col-12">
+                <button type="submit" class="btn btn-debian">Lancer le rapprochement</button>
+            </div>
         </div>
-        <button type="submit" class="btn btn-debian">Lancer le rapprochement</button>
     </form>
 </div>
 
@@ -85,4 +99,129 @@
         </div>
     </div>
 </div>
+
+<div class="modal fade" id="lancementModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Lancement du rapprochement</h5>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-warning small mb-3">
+                    Traitement en cours, merci de ne pas recharger cette page.
+                </div>
+                <ul class="list-group" id="lancementListe"></ul>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-debian btn-sm" id="lancementFermer" disabled>Fermer</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(function () {
+    const form = document.getElementById('lancementForm');
+    if (!form) return;
+
+    const modalEl = document.getElementById('lancementModal');
+    const modal = new bootstrap.Modal(modalEl);
+    const liste = document.getElementById('lancementListe');
+    const fermerBtn = document.getElementById('lancementFermer');
+    const lancerUrl = form.dataset.lancerUrl;
+    const csrfToken = form.querySelector('[name=csrfmiddlewaretoken]').value;
+
+    let traitementEnCours = false;
+    window.addEventListener('beforeunload', function (e) {
+        if (traitementEnCours) {
+            e.preventDefault();
+            e.returnValue = '';
+        }
+    });
+
+    function toIso(d) {
+        return d.toISOString().slice(0, 10);
+    }
+
+    function datesDeLaPlage(dateFrom, dateTo) {
+        const dates = [];
+        let courante = new Date(dateFrom + 'T00:00:00');
+        const fin = new Date(dateTo + 'T00:00:00');
+        while (courante <= fin) {
+            dates.push(toIso(courante));
+            courante.setDate(courante.getDate() + 1);
+        }
+        return dates;
+    }
+
+    function itemHtml(date) {
+        return (
+            '<li class="list-group-item d-flex justify-content-between align-items-start" data-date="' + date + '">' +
+            '<span>' + date + '</span>' +
+            '<span class="statut text-end"><span class="badge text-bg-secondary">A venir</span></span>' +
+            '</li>'
+        );
+    }
+
+    async function lancerDate(date) {
+        const item = liste.querySelector('li[data-date="' + date + '"]');
+        const statut = item.querySelector('.statut');
+        statut.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span><span class="badge text-bg-primary">En cours</span>';
+
+        let data;
+        try {
+            const resp = await fetch(lancerUrl, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrfToken,
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: 'date=' + encodeURIComponent(date),
+            });
+            data = await resp.json();
+        } catch (e) {
+            data = {ok: false, message: "Erreur inattendue lors de l'appel au serveur."};
+        }
+
+        const badgeClass = data.ok ? 'text-bg-success' : 'text-bg-danger';
+        const libelle = data.ok ? 'Termine' : 'Echec';
+        statut.innerHTML = '<span class="badge ' + badgeClass + '">' + libelle + '</span>';
+        if (data.message) {
+            const msg = document.createElement('div');
+            msg.className = 'small text-muted-debian mt-1';
+            msg.textContent = data.message;
+            item.appendChild(msg);
+        }
+    }
+
+    form.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        const dateFrom = form.querySelector('#id_date_from').value;
+        const dateTo = form.querySelector('#id_date_to').value;
+        if (!dateFrom || !dateTo || dateFrom > dateTo) {
+            alert('Veuillez indiquer une plage de dates valide (date de debut avant ou egale a la date de fin).');
+            return;
+        }
+
+        const dates = datesDeLaPlage(dateFrom, dateTo);
+        liste.innerHTML = dates.map(itemHtml).join('');
+        fermerBtn.disabled = true;
+        traitementEnCours = true;
+        modal.show();
+
+        for (const date of dates) {
+            await lancerDate(date);
+        }
+
+        traitementEnCours = false;
+        fermerBtn.disabled = false;
+    });
+
+    fermerBtn.addEventListener('click', function () {
+        location.reload();
+    });
+})();
+</script>
 {% endblock %}
