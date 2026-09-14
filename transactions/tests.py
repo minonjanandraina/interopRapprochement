@@ -1,5 +1,5 @@
 import os
-from datetime import date
+from datetime import date, datetime, time
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -19,7 +19,7 @@ from .models import (
     TransactionPamf,
 )
 from .services_pamf import importer_transactions_pamf
-from .services_rapprochement import CsvMvolaNonImporte, lancer_rapprochement
+from .services_rapprochement import CsvMvolaNonImporte, JourneeCbsNonTerminee, lancer_rapprochement
 
 User = get_user_model()
 
@@ -40,6 +40,13 @@ def make_row(transid='6757009839', amount='299600', msisdn='0342022995', nom='Te
 def make_csv(filename, rows):
     content = '\n'.join([HEADER, *rows]) + '\n'
     return SimpleUploadedFile(filename, content.encode('utf-8'), content_type='text/csv')
+
+
+def journee_cbs_terminee(date_cible):
+    """Horodatage de derniere activite CBS qui satisfait le critere de journee terminee
+    (cf. JourneeCbsNonTerminee) pour `date_cible`, a utiliser comme mock par defaut dans les
+    tests qui ne portent pas specifiquement sur ce controle."""
+    return datetime.combine(date_cible, time(23, 0, 1))
 
 
 class ImporterFichierMvolaTests(TestCase):
@@ -142,6 +149,28 @@ class ImporterTransactionsPamfTests(TestCase):
         self.assertEqual(TransactionPamf.objects.count(), 1)
 
     @patch('transactions.services_pamf.fetch_transactions_pamf')
+    def test_ligne_apilog_sans_mctransaction_est_en_echec_sans_bloquer_limport(self, mock_fetch):
+        """Une ligne apiLog sans correspondance dans mcTransaction (left join, cf. CLAUDE.md) a
+        rAutotransactionID/Time a NULL : la requete a quand meme atteint le CBS, is_sucess=0."""
+        mock_fetch.return_value = [{
+            'rAutotransactionID': None,
+            'postingDate': date(2026, 9, 7),
+            'Time': None,
+            'Note': None,
+            'TRANSID_MVOLA': '6757009839',
+            'responseBody': '',
+            'is_sucess': 0,
+        }]
+
+        import_obj = importer_transactions_pamf(date(2026, 9, 7), self.user)
+
+        self.assertEqual(import_obj.statut, ImportRequetePamf.Statut.SUCCES)
+        transaction_pamf = TransactionPamf.objects.get(transid_mvola='6757009839')
+        self.assertEqual(transaction_pamf.r_autotransaction_id, '')
+        self.assertEqual(transaction_pamf.time, '')
+        self.assertFalse(transaction_pamf.is_success)
+
+    @patch('transactions.services_pamf.fetch_transactions_pamf')
     def test_erreur_connexion_marque_import_en_echec(self, mock_fetch):
         mock_fetch.side_effect = RuntimeError('connexion refusee')
 
@@ -156,11 +185,55 @@ class LancerRapprochementTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username='op', email='op@example.com', password='x')
         self.date_cible = date(2026, 9, 7)
+        self.patcher_derniere_activite = patch('transactions.services_rapprochement.fetch_derniere_activite')
+        self.mock_derniere_activite = self.patcher_derniere_activite.start()
+        self.mock_derniere_activite.return_value = journee_cbs_terminee(self.date_cible)
+        self.addCleanup(self.patcher_derniere_activite.stop)
 
     def test_bloque_si_csv_mvola_non_importe(self):
         with self.assertRaises(CsvMvolaNonImporte):
             lancer_rapprochement(self.date_cible, self.user)
         self.assertEqual(Rapprochement.objects.count(), 0)
+
+    def test_bloque_si_journee_cbs_non_terminee(self):
+        """cf. CLAUDE.md : journee D consideree terminee ssi la derniere activite CBS connue
+        (apiLog, tous marchands/dates confondus) est >= D 23:00:00."""
+        fichier = make_csv('2026-09-07_reporting_PAMF.csv', [make_row(transid='111')])
+        importer_fichier_mvola(fichier, self.user)
+        self.mock_derniere_activite.return_value = datetime(2026, 9, 7, 3, 52, 14)
+
+        with self.assertRaises(JourneeCbsNonTerminee):
+            lancer_rapprochement(self.date_cible, self.user)
+        self.assertEqual(Rapprochement.objects.count(), 0)
+
+    def test_bloque_si_apilog_vide(self):
+        fichier = make_csv('2026-09-07_reporting_PAMF.csv', [make_row(transid='111')])
+        importer_fichier_mvola(fichier, self.user)
+        self.mock_derniere_activite.return_value = None
+
+        with self.assertRaises(JourneeCbsNonTerminee):
+            lancer_rapprochement(self.date_cible, self.user)
+        self.assertEqual(Rapprochement.objects.count(), 0)
+
+    def test_bloque_si_verification_journee_cbs_echoue(self):
+        fichier = make_csv('2026-09-07_reporting_PAMF.csv', [make_row(transid='111')])
+        importer_fichier_mvola(fichier, self.user)
+        self.mock_derniere_activite.side_effect = RuntimeError('connexion refusee')
+
+        with self.assertRaises(JourneeCbsNonTerminee):
+            lancer_rapprochement(self.date_cible, self.user)
+        self.assertEqual(Rapprochement.objects.count(), 0)
+
+    def test_autorise_pile_a_lheure_limite(self):
+        fichier = make_csv('2026-09-07_reporting_PAMF.csv', [make_row(transid='111')])
+        importer_fichier_mvola(fichier, self.user)
+        self.mock_derniere_activite.return_value = datetime(2026, 9, 7, 23, 0, 0)
+
+        with patch('transactions.services_pamf.fetch_transactions_pamf') as mock_fetch:
+            mock_fetch.return_value = []
+            rapprochement = lancer_rapprochement(self.date_cible, self.user)
+
+        self.assertEqual(rapprochement.statut, Rapprochement.Statut.TERMINE)
 
     @patch('transactions.services_pamf.fetch_transactions_pamf')
     def test_classe_success_et_orphelines_et_genere_les_ecarts(self, mock_fetch):
@@ -196,6 +269,34 @@ class LancerRapprochementTests(TestCase):
 
         self.assertFalse(Ecart.objects.filter(transid_mvola='111').exists())
         self.assertTrue(Ecart.objects.filter(transid_mvola='222').exists())
+        self.assertTrue(Ecart.objects.filter(transid_mvola='999').exists())
+
+    @patch('transactions.services_pamf.fetch_transactions_pamf')
+    def test_absente_mvola_et_en_echec_pamf_est_exclue_du_resultat(self, mock_fetch):
+        """cf. CLAUDE.md (decision du 2026-09-14) : absente cote MVOLA ET en echec cote PAMF ->
+        aucun mouvement d'argent des deux cotes -> pas un ecart, exclue completement (pas de
+        ResultatRapprochement ORPHELINE_PAMF, pas d'Ecart), contrairement a une ligne PAMF
+        absente-mais-reussie qui reste une vraie orpheline PAMF a investiguer."""
+        from ecarts.models import Ecart
+
+        fichier = make_csv('2026-09-07_reporting_PAMF.csv', [make_row(transid='111')])
+        importer_fichier_mvola(fichier, self.user)
+        mock_fetch.return_value = [
+            {'rAutotransactionID': 1, 'postingDate': self.date_cible, 'Time': '00:00:00',
+             'Note': '', 'TRANSID_MVOLA': '111', 'responseBody': '', 'is_sucess': 1},
+            {'rAutotransactionID': 2, 'postingDate': self.date_cible, 'Time': '00:00:00',
+             'Note': '', 'TRANSID_MVOLA': '888', 'responseBody': '', 'is_sucess': 0},
+            {'rAutotransactionID': 3, 'postingDate': self.date_cible, 'Time': '00:00:00',
+             'Note': '', 'TRANSID_MVOLA': '999', 'responseBody': '', 'is_sucess': 1},
+        ]
+
+        rapprochement = lancer_rapprochement(self.date_cible, self.user)
+
+        self.assertEqual(rapprochement.nb_success, 1)
+        self.assertEqual(rapprochement.nb_orphelines_pamf, 1)
+        self.assertFalse(ResultatRapprochement.objects.filter(transid_mvola='888').exists())
+        self.assertTrue(ResultatRapprochement.objects.filter(transid_mvola='999').exists())
+        self.assertFalse(Ecart.objects.filter(transid_mvola='888').exists())
         self.assertTrue(Ecart.objects.filter(transid_mvola='999').exists())
 
     @patch('transactions.services_pamf.fetch_transactions_pamf')
@@ -235,6 +336,29 @@ class LancerRapprochementTests(TestCase):
         self.assertEqual(resultat.action_recommandee, ResultatRapprochement.ActionRecommandee.ROLLBACK_MVOLA)
 
     @patch('transactions.services_pamf.fetch_transactions_pamf')
+    def test_ligne_apilog_sans_mctransaction_recommande_ticket_aspekt(self, mock_fetch):
+        """cf. CLAUDE.md (decision du 2026-09-14) : une trace apiLog sans mcTransaction associe
+        prouve que le CBS a recu la requete -> ticket Aspekt, pas rollback MVOLA."""
+        fichier = make_csv('2026-09-07_reporting_PAMF.csv', [make_row(transid='111')])
+        importer_fichier_mvola(fichier, self.user)
+        mock_fetch.return_value = [{
+            'rAutotransactionID': None,
+            'postingDate': self.date_cible,
+            'Time': None,
+            'Note': None,
+            'TRANSID_MVOLA': '111',
+            'responseBody': '',
+            'is_sucess': 0,
+        }]
+
+        rapprochement = lancer_rapprochement(self.date_cible, self.user)
+
+        resultat = rapprochement.resultats.get(transid_mvola='111')
+        self.assertEqual(resultat.statut, ResultatRapprochement.Statut.ORPHELINE_MVOLA)
+        self.assertFalse(resultat.transaction_pamf.is_success)
+        self.assertEqual(resultat.action_recommandee, ResultatRapprochement.ActionRecommandee.TICKET_ASPEKT)
+
+    @patch('transactions.services_pamf.fetch_transactions_pamf')
     def test_echec_cbs_marque_le_rapprochement_en_echec(self, mock_fetch):
         fichier = make_csv('2026-09-07_reporting_PAMF.csv', [make_row(transid='111')])
         importer_fichier_mvola(fichier, self.user)
@@ -253,6 +377,10 @@ class NotificationNouveauxEcartsTests(TestCase):
             username='op', email='op@example.com', password='x', is_email_verified=True,
         )
         self.date_cible = date(2026, 9, 7)
+        self.patcher_derniere_activite = patch('transactions.services_rapprochement.fetch_derniere_activite')
+        self.mock_derniere_activite = self.patcher_derniere_activite.start()
+        self.mock_derniere_activite.return_value = journee_cbs_terminee(self.date_cible)
+        self.addCleanup(self.patcher_derniere_activite.stop)
 
     @patch('transactions.services_pamf.fetch_transactions_pamf')
     def test_notifie_les_utilisateurs_verifies_si_nouveaux_ecarts(self, mock_fetch):
@@ -382,6 +510,10 @@ class LancerRapprochementPerformanceTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username='op', email='op@example.com', password='x')
         self.date_cible = date(2026, 9, 7)
+        self.patcher_derniere_activite = patch('transactions.services_rapprochement.fetch_derniere_activite')
+        self.mock_derniere_activite = self.patcher_derniere_activite.start()
+        self.mock_derniere_activite.return_value = journee_cbs_terminee(self.date_cible)
+        self.addCleanup(self.patcher_derniere_activite.stop)
 
     def _nb_requetes_pour_une_relance(self, nb_transactions):
         rows = [make_row(transid=f'T{i}') for i in range(nb_transactions)]
@@ -533,11 +665,13 @@ class RapprochementLignesViewTests(TestCase):
         self.client.force_login(self.user)
         fichier = make_csv('2026-09-07_reporting_PAMF.csv', [make_row(transid='111'), make_row(transid='222')])
         importer_fichier_mvola(fichier, self.user)
-        with patch('transactions.services_pamf.fetch_transactions_pamf') as mock_fetch:
+        with patch('transactions.services_pamf.fetch_transactions_pamf') as mock_fetch, \
+                patch('transactions.services_rapprochement.fetch_derniere_activite') as mock_derniere_activite:
             mock_fetch.return_value = [
                 {'rAutotransactionID': 1, 'postingDate': date(2026, 9, 7), 'Time': '00:00:00',
                  'Note': '', 'TRANSID_MVOLA': '111', 'responseBody': ''},
             ]
+            mock_derniere_activite.return_value = journee_cbs_terminee(date(2026, 9, 7))
             self.rapprochement = lancer_rapprochement(date(2026, 9, 7), self.user)
 
     def test_lignes_mvola_affiche_lentete_et_le_tableau(self):

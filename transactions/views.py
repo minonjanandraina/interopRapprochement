@@ -12,7 +12,7 @@ from user.decorators import privilege_required
 from .csv_mvola import FichierMvolaInvalide, importer_fichier_mvola
 from .forms import FiltreMvolaForm, FiltrePamfForm, ImportMvolaForm, RapprochementForm
 from .models import ImportFichierMvola, Rapprochement, ResultatRapprochement, TransactionMvola, TransactionPamf
-from .services_rapprochement import CsvMvolaNonImporte, lancer_rapprochement
+from .services_rapprochement import CsvMvolaNonImporte, JourneeCbsNonTerminee, lancer_rapprochement
 
 PAGE_SIZE = 25
 
@@ -156,7 +156,7 @@ def mvola_rapprochement(request):
             date_cible = form.cleaned_data['date']
             try:
                 rapprochement = lancer_rapprochement(date_cible, request.user)
-            except CsvMvolaNonImporte as exc:
+            except (CsvMvolaNonImporte, JourneeCbsNonTerminee) as exc:
                 form.add_error('date', str(exc))
             else:
                 if rapprochement.statut == Rapprochement.Statut.ECHEC:

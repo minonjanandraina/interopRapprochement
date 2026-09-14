@@ -36,10 +36,13 @@ def importer_transactions_pamf(date_requete, user):
         transid = str(ligne['TRANSID_MVOLA'])
         if transid in deja_existants:
             continue
+        # rAutotransactionID/Time sont NULL quand la ligne apiLog n'a pas (encore) de
+        # correspondance dans mcTransaction (cf. CLAUDE.md - left join) : la requete a atteint
+        # le CBS (trace apiLog) mais n'a pas ete traitee -> is_sucess=0, ticket Aspekt recommande.
         a_inserer.append(TransactionPamf(
-            r_autotransaction_id=str(ligne['rAutotransactionID']),
+            r_autotransaction_id=str(ligne['rAutotransactionID']) if ligne['rAutotransactionID'] is not None else '',
             posting_date=ligne['postingDate'],
-            time=str(ligne.get('Time', '')),
+            time=str(ligne['Time']) if ligne.get('Time') is not None else '',
             note=ligne.get('Note') or '',
             transid_mvola=transid,
             response_body=ligne.get('responseBody') or '',

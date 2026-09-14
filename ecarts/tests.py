@@ -8,7 +8,7 @@ from django.test import Client, TestCase
 
 from transactions.csv_mvola import importer_fichier_mvola
 from transactions.services_rapprochement import lancer_rapprochement
-from transactions.tests import make_csv, make_row
+from transactions.tests import journee_cbs_terminee, make_csv, make_row
 from user import privileges
 from user.models import Permission, Role
 
@@ -32,11 +32,13 @@ class ListeEcartViewTests(TestCase):
 
         fichier = make_csv('2026-09-07_reporting_PAMF.csv', [make_row(transid='111'), make_row(transid='222')])
         importer_fichier_mvola(fichier, self.user)
-        with patch('transactions.services_pamf.fetch_transactions_pamf') as mock_fetch:
+        with patch('transactions.services_pamf.fetch_transactions_pamf') as mock_fetch, \
+                patch('transactions.services_rapprochement.fetch_derniere_activite') as mock_derniere_activite:
             mock_fetch.return_value = [
                 {'rAutotransactionID': 1, 'postingDate': date(2026, 9, 7), 'Time': '00:00:00',
                  'Note': '', 'TRANSID_MVOLA': '111', 'responseBody': ''},
             ]
+            mock_derniere_activite.return_value = journee_cbs_terminee(date(2026, 9, 7))
             lancer_rapprochement(date(2026, 9, 7), self.user)
         # '111' est rapprochee (SUCCESS), '222' est orpheline MVOLA -> un seul Ecart attendu.
 
@@ -72,13 +74,15 @@ class ListeEcartViewTests(TestCase):
 
     def test_orpheline_pamf_na_pas_de_montant(self):
         """La requete CBS ne remonte pas de montant : rien a afficher pour une ORPHELINE_PAMF."""
-        with patch('transactions.services_pamf.fetch_transactions_pamf') as mock_fetch:
+        with patch('transactions.services_pamf.fetch_transactions_pamf') as mock_fetch, \
+                patch('transactions.services_rapprochement.fetch_derniere_activite') as mock_derniere_activite:
             mock_fetch.return_value = [
                 {'rAutotransactionID': 1, 'postingDate': date(2026, 9, 7), 'Time': '00:00:00',
                  'Note': '', 'TRANSID_MVOLA': '111', 'responseBody': ''},
                 {'rAutotransactionID': 2, 'postingDate': date(2026, 9, 7), 'Time': '00:00:00',
                  'Note': '', 'TRANSID_MVOLA': '999', 'responseBody': ''},
             ]
+            mock_derniere_activite.return_value = journee_cbs_terminee(date(2026, 9, 7))
             lancer_rapprochement(date(2026, 9, 7), self.user)
 
         ecart_pamf = Ecart.objects.get(transid_mvola='999')
@@ -115,11 +119,13 @@ class DetailEcartViewTests(TestCase):
 
         fichier = make_csv('2026-09-07_reporting_PAMF.csv', [make_row(transid='111'), make_row(transid='222')])
         importer_fichier_mvola(fichier, self.user)
-        with patch('transactions.services_pamf.fetch_transactions_pamf') as mock_fetch:
+        with patch('transactions.services_pamf.fetch_transactions_pamf') as mock_fetch, \
+                patch('transactions.services_rapprochement.fetch_derniere_activite') as mock_derniere_activite:
             mock_fetch.return_value = [
                 {'rAutotransactionID': 1, 'postingDate': date(2026, 9, 7), 'Time': '00:00:00',
                  'Note': 'note pamf', 'TRANSID_MVOLA': '111', 'responseBody': '{"ok": true}'},
             ]
+            mock_derniere_activite.return_value = journee_cbs_terminee(date(2026, 9, 7))
             lancer_rapprochement(date(2026, 9, 7), self.user)
         self.ecart_orpheline_mvola = Ecart.objects.get(transid_mvola='222')
 
@@ -197,11 +203,13 @@ class TicketAspektViewTests(TestCase):
 
         fichier = make_csv('2026-09-07_reporting_PAMF.csv', [make_row(transid='555')])
         importer_fichier_mvola(fichier, self.user)
-        with patch('transactions.services_pamf.fetch_transactions_pamf') as mock_fetch:
+        with patch('transactions.services_pamf.fetch_transactions_pamf') as mock_fetch, \
+                patch('transactions.services_rapprochement.fetch_derniere_activite') as mock_derniere_activite:
             mock_fetch.return_value = [
                 {'rAutotransactionID': 9, 'postingDate': date(2026, 9, 7), 'Time': '00:00:00',
                  'Note': '', 'TRANSID_MVOLA': '555', 'responseBody': '', 'is_sucess': 0},
             ]
+            mock_derniere_activite.return_value = journee_cbs_terminee(date(2026, 9, 7))
             lancer_rapprochement(date(2026, 9, 7), self.user)
         self.ecart = Ecart.objects.get(transid_mvola='555')
 

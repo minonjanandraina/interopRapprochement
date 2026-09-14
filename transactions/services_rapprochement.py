@@ -11,8 +11,11 @@ recalculer a neuf. C'est un choix assume (cf. Decisions prises) - le travail de 
 deja effectue sur une date n'est PAS conserve d'une relance a l'autre.
 """
 
+from datetime import datetime, time
+
 from django.db import transaction as db_transaction
 
+from .cbs import fetch_derniere_activite
 from .models import (
     ImportFichierMvola,
     ImportRequetePamf,
@@ -26,6 +29,36 @@ from .services_pamf import importer_transactions_pamf
 
 class CsvMvolaNonImporte(Exception):
     """Le CSV MVOLA de la date demandee n'a pas encore ete importe."""
+
+
+class JourneeCbsNonTerminee(Exception):
+    """La journee CBS de la date demandee n'est pas encore consideree comme terminee.
+
+    Heuristique (cf. CLAUDE.md) : on lit l'horodatage de la derniere ligne loggee dans
+    bagsPAMF_CBS_MC.dbo.apiLog (toutes dates/marchands confondus, la plus recente par apiLogID).
+    La journee `date_cible` est consideree terminee si cet horodatage est >= `date_cible` 23:00:00.
+    En cas d'echec de cette verification (CBS injoignable) ou d'absence totale de donnees dans
+    apiLog, on bloque par prudence plutot que de laisser lancer un rapprochement sur une journee
+    potentiellement incomplete.
+    """
+
+
+def _verifier_journee_cbs_terminee(date_cible):
+    heure_limite = datetime.combine(date_cible, time(23, 0, 0))
+    try:
+        derniere_activite = fetch_derniere_activite()
+    except Exception as exc:
+        raise JourneeCbsNonTerminee(
+            f"Impossible de verifier si la journee CBS du {date_cible.strftime('%d/%m/%Y')} "
+            f"est terminee : {exc}"
+        ) from exc
+
+    if derniere_activite is None or derniere_activite < heure_limite:
+        raise JourneeCbsNonTerminee(
+            f"La journee CBS du {date_cible.strftime('%d/%m/%Y')} n'est pas encore terminee "
+            f"(derniere activite CBS connue : "
+            f"{derniere_activite.strftime('%d/%m/%Y %H:%M:%S') if derniere_activite else 'aucune'})."
+        )
 
 
 def _purger_resultats_existants(rapprochement):
@@ -78,6 +111,8 @@ def lancer_rapprochement(date_cible, user):
             f"Le fichier CSV MVOLA du {date_cible.strftime('%d/%m/%Y')} n'a pas encore ete importe."
         )
 
+    _verifier_journee_cbs_terminee(date_cible)
+
     rapprochement, _ = Rapprochement.objects.get_or_create(date=date_cible)
     rapprochement.statut = Rapprochement.Statut.EN_COURS
     rapprochement.lance_par = user
@@ -112,6 +147,12 @@ def lancer_rapprochement(date_cible, user):
             # Cf. ResultatRapprochement.action_recommandee et CLAUDE.md.
             statut = ResultatRapprochement.Statut.ORPHELINE_MVOLA
             nb_orph_mvola += 1
+        elif pamf and not pamf.is_success:
+            # Absente cote MVOLA ET en echec cote PAMF : aucun mouvement d'argent ni d'un cote
+            # ni de l'autre (pas de debit wallet, transaction PAMF non postee) -> rien a
+            # rapprocher ni a regulariser. Exclue completement du resultat (pas de
+            # ResultatRapprochement, pas d'Ecart), cf. CLAUDE.md, decision du 2026-09-14.
+            continue
         else:
             statut = ResultatRapprochement.Statut.ORPHELINE_PAMF
             nb_orph_pamf += 1
