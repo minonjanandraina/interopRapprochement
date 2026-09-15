@@ -61,13 +61,9 @@ a:hover {
 }
 
 .app-shell {
-    max-width: 1140px;
+    max-width: 1900px;
     margin: 0 auto;
     padding: 2rem 1rem;
-}
-
-.app-shell-wide {
-    max-width: 1900px;
 }
 
 .text-muted-debian {
