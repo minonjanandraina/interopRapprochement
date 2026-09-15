@@ -66,6 +66,10 @@ a:hover {
     padding: 2rem 1rem;
 }
 
+.app-shell-wide {
+    max-width: 1600px;
+}
+
 .text-muted-debian {
     color: var(--text-muted);
 }
