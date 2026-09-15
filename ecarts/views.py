@@ -48,7 +48,10 @@ def _filtrer_ecarts(request):
     filtre_applique = False
     if form.is_valid():
         data = form.cleaned_data
-        filtre_applique = any(data.values())
+        # Prerequis volontairement plus strict qu'un filtre quelconque (cf. CLAUDE.md) : statut ET
+        # action recommandee doivent tous les deux etre choisis pour cibler precisement le lot
+        # d'ecarts avant d'autoriser une action en masse.
+        filtre_applique = bool(data['statut']) and bool(data['action_recommandee'])
         if data['date_min']:
             queryset = queryset.filter(date_transaction__gte=data['date_min'])
         if data['date_max']:
@@ -285,7 +288,9 @@ def _filtrer_ecarts_om(request):
     filtre_applique = False
     if form.is_valid():
         data = form.cleaned_data
-        filtre_applique = any(data.values())
+        # Cf. _filtrer_ecarts (MVOLA) : statut ET action recommandee requis pour cibler le lot avant
+        # d'autoriser une action en masse.
+        filtre_applique = bool(data['statut']) and bool(data['action_recommandee'])
         if data['date_min']:
             queryset = queryset.filter(date_transaction__gte=data['date_min'])
         if data['date_max']:
