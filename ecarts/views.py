@@ -1,6 +1,7 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 
 from core import reports
 from core.htmx import is_htmx_request
@@ -10,6 +11,7 @@ from user import privileges
 from user.decorators import privilege_required
 
 from .forms import (
+    BulkActionForm,
     ChangerStatutForm,
     CommentaireForm,
     FiltreEcartForm,
@@ -88,7 +90,10 @@ def mvola_liste(request):
         export_excel_url=export_excel_url,
         export_pdf_url=export_pdf_url,
     )
-    context = {'form': form, 'page_obj': page_obj, 'querystring': querystring, 'meta': meta}
+    context = {
+        'form': form, 'page_obj': page_obj, 'querystring': querystring, 'meta': meta,
+        'bulk_form': BulkActionForm(), 'statut_choices': Ecart.Statut.choices,
+    }
 
     if is_htmx_request(request):
         return render(request, 'ecarts/partials/liste_table.html', context)
@@ -220,6 +225,43 @@ def resoudre_doublon_pamf_vue(request, pk):
     return redirect('ecarts:detail', pk=pk)
 
 
+@privilege_required(privileges.TRAITER_ECARTS)
+def mvola_bulk_action(request):
+    """MaJ en masse (statut / commentaire / ticket Aspekt) sur les ecarts coches dans la liste."""
+    url = reverse('ecarts:mvola_liste')
+    querystring = request.POST.get('_querystring', '')
+    if querystring:
+        url = f'{url}?{querystring}'
+
+    if request.method != 'POST':
+        return redirect(url)
+
+    ids = request.POST.getlist('ecart_ids')
+    if not ids:
+        messages.error(request, 'Aucun ecart selectionne.')
+        return redirect(url)
+
+    form = BulkActionForm(request.POST)
+    if not form.is_valid():
+        messages.error(request, 'Formulaire de mise a jour en masse invalide.')
+        return redirect(url)
+
+    action = form.cleaned_data['action']
+    nb = 0
+    for ecart in Ecart.objects.filter(pk__in=ids):
+        if action == 'statut':
+            if changer_statut(ecart, request.user, form.cleaned_data['nouveau_statut']):
+                nb += 1
+        elif action == 'commentaire':
+            ajouter_commentaire(ecart, request.user, form.cleaned_data['texte'])
+            nb += 1
+        else:
+            enregistrer_ticket_aspekt(ecart, request.user, form.cleaned_data['reference'])
+            nb += 1
+    messages.success(request, f'{nb} ecart(s) mis a jour sur {len(ids)} selectionne(s).')
+    return redirect(url)
+
+
 # --- Orange Money (OM) -------------------------------------------------------------------------
 # Miroir des vues MVOLA ci-dessus - cf. CLAUDE.md, Decisions prises (duplication OM).
 
@@ -279,7 +321,10 @@ def om_liste(request):
         export_excel_url=export_excel_url,
         export_pdf_url=export_pdf_url,
     )
-    context = {'form': form, 'page_obj': page_obj, 'querystring': querystring, 'meta': meta}
+    context = {
+        'form': form, 'page_obj': page_obj, 'querystring': querystring, 'meta': meta,
+        'bulk_form': BulkActionForm(), 'statut_choices': EcartOM.Statut.choices,
+    }
 
     if is_htmx_request(request):
         return render(request, 'ecarts/partials/liste_om_table.html', context)
@@ -409,3 +454,40 @@ def om_resoudre_doublon_pamf_vue(request, pk):
         services_om.resoudre_doublon_pamf(ecart, request.user, candidat)
         messages.success(request, 'Posting PAMF de reference enregistre.')
     return redirect('ecarts:om_detail', pk=pk)
+
+
+@privilege_required(privileges.TRAITER_ECARTS)
+def om_bulk_action(request):
+    """Cf. mvola_bulk_action - meme mecanisme pour Orange Money."""
+    url = reverse('ecarts:om_liste')
+    querystring = request.POST.get('_querystring', '')
+    if querystring:
+        url = f'{url}?{querystring}'
+
+    if request.method != 'POST':
+        return redirect(url)
+
+    ids = request.POST.getlist('ecart_ids')
+    if not ids:
+        messages.error(request, 'Aucun ecart selectionne.')
+        return redirect(url)
+
+    form = BulkActionForm(request.POST)
+    if not form.is_valid():
+        messages.error(request, 'Formulaire de mise a jour en masse invalide.')
+        return redirect(url)
+
+    action = form.cleaned_data['action']
+    nb = 0
+    for ecart in EcartOM.objects.filter(pk__in=ids):
+        if action == 'statut':
+            if services_om.changer_statut(ecart, request.user, form.cleaned_data['nouveau_statut']):
+                nb += 1
+        elif action == 'commentaire':
+            services_om.ajouter_commentaire(ecart, request.user, form.cleaned_data['texte'])
+            nb += 1
+        else:
+            services_om.enregistrer_ticket_aspekt(ecart, request.user, form.cleaned_data['reference'])
+            nb += 1
+    messages.success(request, f'{nb} ecart(s) mis a jour sur {len(ids)} selectionne(s).')
+    return redirect(url)

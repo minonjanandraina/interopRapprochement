@@ -7,6 +7,7 @@ app_name = 'ecarts'
 urlpatterns = [
     path('mvola/ecarts/', views.mvola_liste, name='mvola_liste'),
     path('mvola/ecarts/export/<str:format>/', views.mvola_liste_export, name='mvola_liste_export'),
+    path('mvola/ecarts/action-masse/', views.mvola_bulk_action, name='mvola_bulk_action'),
     path('mvola/ecarts/<int:pk>/', views.detail, name='detail'),
     path('mvola/ecarts/<int:pk>/commentaire/', views.ajouter_commentaire_vue, name='ajouter_commentaire'),
     path('mvola/ecarts/<int:pk>/statut/', views.changer_statut_vue, name='changer_statut'),
@@ -17,6 +18,7 @@ urlpatterns = [
 
     path('om/ecarts/', views.om_liste, name='om_liste'),
     path('om/ecarts/export/<str:format>/', views.om_liste_export, name='om_liste_export'),
+    path('om/ecarts/action-masse/', views.om_bulk_action, name='om_bulk_action'),
     path('om/ecarts/<int:pk>/', views.om_detail, name='om_detail'),
     path('om/ecarts/<int:pk>/commentaire/', views.om_ajouter_commentaire_vue, name='om_ajouter_commentaire'),
     path('om/ecarts/<int:pk>/statut/', views.om_changer_statut_vue, name='om_changer_statut'),

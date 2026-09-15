@@ -78,3 +78,40 @@ class RollbackConfirmeForm(forms.Form):
         required=False, label='Reference / commentaire (optionnel)',
         widget=forms.TextInput(attrs={'class': 'form-control'}),
     )
+
+
+class BulkActionForm(forms.Form):
+    """MaJ en masse depuis une liste d'ecarts (MVOLA ou OM, cf. liste_table.html/liste_om_table.html).
+
+    Un seul formulaire partage entre les 2 services : les choix de statut (Ecart.Statut /
+    EcartOM.Statut) sont des chaines identiques des deux cotes, pas de generalisation forcee
+    ailleurs, juste ce formulaire qui n'a pas de raison de diverger.
+    """
+
+    ACTION_CHOICES = [
+        ('statut', 'Changer le statut'),
+        ('commentaire', 'Ajouter un commentaire'),
+        ('ticket_aspekt', 'Enregistrer un ticket Aspekt'),
+    ]
+
+    action = forms.ChoiceField(choices=ACTION_CHOICES, widget=forms.Select(attrs={'class': 'form-select form-select-sm'}))
+    nouveau_statut = forms.ChoiceField(
+        required=False, choices=Ecart.Statut.choices, widget=forms.Select(attrs={'class': 'form-select form-select-sm'}),
+    )
+    texte = forms.CharField(
+        required=False, widget=forms.TextInput(attrs={'class': 'form-control form-control-sm'}),
+    )
+    reference = forms.CharField(
+        required=False, widget=forms.TextInput(attrs={'class': 'form-control form-control-sm'}),
+    )
+
+    def clean(self):
+        cleaned = super().clean()
+        action = cleaned.get('action')
+        if action == 'statut' and not cleaned.get('nouveau_statut'):
+            self.add_error('nouveau_statut', 'Choisissez un statut.')
+        elif action == 'commentaire' and not cleaned.get('texte'):
+            self.add_error('texte', 'Commentaire requis.')
+        elif action == 'ticket_aspekt' and not cleaned.get('reference'):
+            self.add_error('reference', 'Reference requise.')
+        return cleaned

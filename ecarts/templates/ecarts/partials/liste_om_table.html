@@ -1,41 +1,107 @@
 {% include "core/_rapport_entete.html" %}
-<div class="table-responsive">
-    <table class="table table-sm table-striped">
-        <thead>
-            <tr><th>TRANSID</th><th>Date</th><th>Type</th><th>Montant</th><th>Action recommandee</th><th>Statut</th><th>Detecte le</th><th></th></tr>
-        </thead>
-        <tbody>
-            {% for e in page_obj %}
-            <tr>
-                <td>{{ e.transid_om }}</td>
-                <td>{{ e.date_transaction }}</td>
-                <td>
-                    <span class="badge {% if e.type_ecart == 'ORPHELINE_OM' %}text-bg-warning{% elif e.type_ecart == 'DOUBLON_PAMF' %}text-bg-secondary{% else %}text-bg-info{% endif %}">
-                        {{ e.get_type_ecart_display }}
-                    </span>
-                </td>
-                <td>{% if e.montant is not None %}{{ e.montant }}{% else %}<span class="text-muted-debian">-</span>{% endif %}</td>
-                <td>
-                    {% if e.action_recommandee %}
-                    <span class="badge {% if e.action_recommandee == 'ROLLBACK_OM' %}text-bg-danger{% elif e.action_recommandee == 'CHOISIR_POSTING' %}text-bg-secondary{% else %}text-bg-warning{% endif %}">
-                        {{ e.action_recommandee.label }}
-                    </span>
-                    {% else %}
-                    <span class="text-muted-debian">-</span>
-                    {% endif %}
-                </td>
-                <td>
-                    <span class="badge {% if e.statut == 'REGULARISE' %}text-bg-success{% elif e.statut == 'EN_COURS' %}text-bg-secondary{% else %}text-bg-danger{% endif %}">
-                        {{ e.get_statut_display }}
-                    </span>
-                </td>
-                <td>{{ e.detecte_le }}</td>
-                <td><a href="{% url 'ecarts:om_detail' e.pk %}" class="btn btn-sm btn-outline-secondary">Details</a></td>
-            </tr>
-            {% empty %}
-            <tr><td colspan="8" class="text-muted-debian">Aucun ecart.</td></tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
+<form method="post" action="{% url 'ecarts:om_bulk_action' %}" id="bulk-form-om">
+    {% csrf_token %}
+    <input type="hidden" name="_querystring" value="{{ querystring }}">
+    <div class="row g-2 align-items-end mb-2">
+        <div class="col-auto">
+            <label class="form-label small mb-1">Action en masse</label>
+            {{ bulk_form.action }}
+        </div>
+        <div class="col-auto bulk-field" data-action="statut">
+            <label class="form-label small mb-1">Nouveau statut</label>
+            <select name="nouveau_statut" class="form-select form-select-sm">
+                {% for value, label in statut_choices %}
+                <option value="{{ value }}">{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-auto bulk-field d-none" data-action="commentaire">
+            <label class="form-label small mb-1">Commentaire</label>
+            <input type="text" name="texte" class="form-control form-control-sm">
+        </div>
+        <div class="col-auto bulk-field d-none" data-action="ticket_aspekt">
+            <label class="form-label small mb-1">Reference ticket Aspekt</label>
+            <input type="text" name="reference" class="form-control form-control-sm">
+        </div>
+        <div class="col-auto">
+            <button type="submit" class="btn btn-debian btn-sm">Appliquer aux ecarts coches</button>
+        </div>
+    </div>
+
+    <div class="table-responsive">
+        <table class="table table-sm table-striped">
+            <thead>
+                <tr>
+                    <th><input type="checkbox" class="ecarts-select-all" aria-label="Tout selectionner"></th>
+                    <th>TRANSID</th><th>Date</th><th>Type</th><th>Montant</th><th>Action recommandee</th><th>Statut</th><th>Detecte le</th><th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for e in page_obj %}
+                <tr>
+                    <td><input type="checkbox" name="ecart_ids" value="{{ e.pk }}" class="ecart-checkbox"></td>
+                    <td>{{ e.transid_om }}</td>
+                    <td>{{ e.date_transaction }}</td>
+                    <td>
+                        <span class="badge {% if e.type_ecart == 'ORPHELINE_OM' %}text-bg-warning{% elif e.type_ecart == 'DOUBLON_PAMF' %}text-bg-secondary{% else %}text-bg-info{% endif %}">
+                            {{ e.get_type_ecart_display }}
+                        </span>
+                    </td>
+                    <td>{% if e.montant is not None %}{{ e.montant }}{% else %}<span class="text-muted-debian">-</span>{% endif %}</td>
+                    <td>
+                        {% if e.action_recommandee %}
+                        <span class="badge {% if e.action_recommandee == 'ROLLBACK_OM' %}text-bg-danger{% elif e.action_recommandee == 'CHOISIR_POSTING' %}text-bg-secondary{% else %}text-bg-warning{% endif %}">
+                            {{ e.action_recommandee.label }}
+                        </span>
+                        {% else %}
+                        <span class="text-muted-debian">-</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {% if e.statut == 'REGULARISE' %}text-bg-success{% elif e.statut == 'EN_COURS' %}text-bg-secondary{% else %}text-bg-danger{% endif %}">
+                            {{ e.get_statut_display }}
+                        </span>
+                    </td>
+                    <td>{{ e.detecte_le }}</td>
+                    <td><a href="{% url 'ecarts:om_detail' e.pk %}" class="btn btn-sm btn-outline-secondary">Details</a></td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="9" class="text-muted-debian">Aucun ecart.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</form>
 {% include "_pagination.html" %}
+
+<script>
+(function() {
+    var form = document.getElementById('bulk-form-om');
+    if (!form) { return; }
+
+    var selectAll = form.querySelector('.ecarts-select-all');
+    if (selectAll) {
+        selectAll.addEventListener('change', function() {
+            form.querySelectorAll('.ecart-checkbox').forEach(function(cb) { cb.checked = selectAll.checked; });
+        });
+    }
+
+    var actionSelect = form.querySelector('[name="action"]');
+    function majChampsAction() {
+        form.querySelectorAll('.bulk-field').forEach(function(champ) {
+            champ.classList.toggle('d-none', champ.dataset.action !== actionSelect.value);
+        });
+    }
+    if (actionSelect) {
+        actionSelect.addEventListener('change', majChampsAction);
+        majChampsAction();
+    }
+
+    form.addEventListener('submit', function(e) {
+        if (!form.querySelector('.ecart-checkbox:checked')) {
+            e.preventDefault();
+            alert('Selectionnez au moins un ecart.');
+        }
+    });
+})();
+</script>

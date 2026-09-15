@@ -209,3 +209,84 @@ class DoublonPamfOMViewTests(TestCase):
             {'transaction_pamf_id': candidat.pk},
         )
         self.assertEqual(resp.status_code, 403)
+
+
+class BulkActionOMViewTests(TestCase):
+    """Cf. ecarts.tests.BulkActionViewTests (MVOLA) - meme mecanisme pour Orange Money."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='op', email='op@example.com', password='x')
+        grant_privilege(self.user, privileges.TRAITER_ECARTS)
+        self.client = Client()
+        self.client.force_login(self.user)
+
+        import_obj = make_import_om(self.user)
+        make_transaction_om(import_obj, '111')
+        make_transaction_om(import_obj, '222')
+        make_transaction_om(import_obj, '333')
+        with patch('transactions.services_pamf_om.fetch_transactions_pamf_om') as mock_fetch, \
+                patch('transactions.services_rapprochement.fetch_derniere_activite') as mock_derniere_activite:
+            mock_fetch.return_value = []
+            mock_derniere_activite.return_value = journee_cbs_terminee(date(2026, 9, 7))
+            lancer_rapprochement_om(date(2026, 9, 7), self.user)
+        # '111'/'222'/'333' sont toutes orphelines OM (aucune ligne PAMF).
+        self.ecart1 = EcartOM.objects.get(transid_om='111')
+        self.ecart2 = EcartOM.objects.get(transid_om='222')
+        self.ecart3 = EcartOM.objects.get(transid_om='333')
+
+    def test_changer_statut_en_masse_met_a_jour_les_ecarts_coches_seulement(self):
+        resp = self.client.post(
+            '/ecarts/om/ecarts/action-masse/',
+            {'action': 'statut', 'nouveau_statut': EcartOM.Statut.EN_COURS,
+             'ecart_ids': [self.ecart1.pk, self.ecart2.pk]},
+            follow=True,
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.ecart1.refresh_from_db()
+        self.ecart2.refresh_from_db()
+        self.ecart3.refresh_from_db()
+        self.assertEqual(self.ecart1.statut, EcartOM.Statut.EN_COURS)
+        self.assertEqual(self.ecart2.statut, EcartOM.Statut.EN_COURS)
+        self.assertEqual(self.ecart3.statut, EcartOM.Statut.DETECTE)
+        self.assertEqual(
+            EcartHistoriqueOM.objects.filter(action=EcartHistoriqueOM.Action.CHANGEMENT_STATUT).count(), 2,
+        )
+
+    def test_ajouter_commentaire_en_masse_cree_une_entree_par_ecart_coche(self):
+        self.client.post(
+            '/ecarts/om/ecarts/action-masse/',
+            {'action': 'commentaire', 'texte': 'relance groupee', 'ecart_ids': [self.ecart1.pk, self.ecart3.pk]},
+            follow=True,
+        )
+        self.assertEqual(
+            EcartHistoriqueOM.objects.filter(action=EcartHistoriqueOM.Action.COMMENTAIRE, commentaire='relance groupee').count(), 2,
+        )
+        self.assertFalse(EcartHistoriqueOM.objects.filter(ecart=self.ecart2).exists())
+
+    def test_enregistrer_ticket_aspekt_en_masse(self):
+        self.client.post(
+            '/ecarts/om/ecarts/action-masse/',
+            {'action': 'ticket_aspekt', 'reference': 'ASP-1000', 'ecart_ids': [self.ecart1.pk]},
+            follow=True,
+        )
+        entree = EcartHistoriqueOM.objects.get(ecart=self.ecart1)
+        self.assertEqual(entree.action, EcartHistoriqueOM.Action.TICKET_ASPEKT)
+        self.assertEqual(entree.reference_externe, 'ASP-1000')
+
+    def test_sans_selection_ne_modifie_rien(self):
+        resp = self.client.post(
+            '/ecarts/om/ecarts/action-masse/',
+            {'action': 'statut', 'nouveau_statut': EcartOM.Statut.EN_COURS}, follow=True,
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.ecart1.refresh_from_db()
+        self.assertEqual(self.ecart1.statut, EcartOM.Statut.DETECTE)
+
+    def test_sans_privilege_refuse(self):
+        autre_user = User.objects.create_user(username='sans-droit', email='sd@example.com', password='x')
+        self.client.force_login(autre_user)
+        resp = self.client.post(
+            '/ecarts/om/ecarts/action-masse/',
+            {'action': 'statut', 'nouveau_statut': EcartOM.Statut.EN_COURS, 'ecart_ids': [self.ecart1.pk]},
+        )
+        self.assertEqual(resp.status_code, 403)
