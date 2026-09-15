@@ -1,11 +1,11 @@
 <div class="sidebar-section-title">Services</div>
 <a class="sidebar-link {% if active_service == 'mvola' %}active{% endif %}"
    href="{% if user.peut_importer_csv_mvola %}{% url 'transactions:mvola_import' %}{% elif user.peut_lancer_rapprochement %}{% url 'transactions:mvola_rapprochement' %}{% else %}{% url 'transactions:mvola_liste_transactions' %}{% endif %}">
-    MVOLA
+    WTB MVOLA
 </a>
 <a class="sidebar-link {% if active_service == 'om' %}active{% endif %}"
    href="{% if user.peut_importer_fichier_om %}{% url 'transactions:om_import' %}{% elif user.peut_lancer_rapprochement %}{% url 'transactions:om_rapprochement' %}{% else %}{% url 'transactions:om_liste_transactions' %}{% endif %}">
-    Orange Money
+    WTB Orange Money
 </a>
 <span class="sidebar-link disabled" title="Bientot disponible">
     Airtel Money <span class="badge text-bg-secondary ms-1">bientot</span>
