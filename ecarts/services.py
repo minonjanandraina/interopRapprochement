@@ -47,3 +47,22 @@ def confirmer_rollback(ecart, auteur, reference=''):
         ecart=ecart, auteur=auteur, action=EcartHistorique.Action.ROLLBACK_CONFIRME,
         reference_externe=reference,
     )
+
+
+def resoudre_doublon_pamf(ecart, auteur, transaction_pamf):
+    """Enregistre le choix de l'agent parmi plusieurs postings PAMF candidats pour ce transid
+    (cf. CLAUDE.md - Decisions prises, paiement marchand scinde sur plusieurs prets cote CBS).
+
+    Ne recalcule pas le statut de l'ecart/ResultatRapprochement : DOUBLON_PAMF reste un marqueur
+    historique de l'ambiguite initiale, comme TICKET_ASPEKT/ROLLBACK_CONFIRME ne changent pas non
+    plus le statut de suivi automatiquement.
+    """
+    resultat = ecart.resultat
+    resultat.transaction_pamf = transaction_pamf
+    resultat.save(update_fields=['transaction_pamf'])
+    statut_cbs = 'Succes' if transaction_pamf.is_success else 'Echec'
+    return EcartHistorique.objects.create(
+        ecart=ecart, auteur=auteur, action=EcartHistorique.Action.RESOLUTION_DOUBLON,
+        reference_externe=transaction_pamf.r_autotransaction_id,
+        commentaire=f'Posting choisi comme reference : rAutotransactionID={transaction_pamf.r_autotransaction_id}, statut CBS={statut_cbs}.',
+    )

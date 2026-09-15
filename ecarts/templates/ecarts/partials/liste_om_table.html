@@ -7,17 +7,17 @@
         <tbody>
             {% for e in page_obj %}
             <tr>
-                <td>{{ e.transid_mvola }}</td>
+                <td>{{ e.transid_om }}</td>
                 <td>{{ e.date_transaction }}</td>
                 <td>
-                    <span class="badge {% if e.type_ecart == 'ORPHELINE_MVOLA' %}text-bg-warning{% elif e.type_ecart == 'DOUBLON_PAMF' %}text-bg-secondary{% else %}text-bg-info{% endif %}">
+                    <span class="badge {% if e.type_ecart == 'ORPHELINE_OM' %}text-bg-warning{% elif e.type_ecart == 'DOUBLON_PAMF' %}text-bg-secondary{% else %}text-bg-info{% endif %}">
                         {{ e.get_type_ecart_display }}
                     </span>
                 </td>
                 <td>{% if e.montant is not None %}{{ e.montant }}{% else %}<span class="text-muted-debian">-</span>{% endif %}</td>
                 <td>
                     {% if e.action_recommandee %}
-                    <span class="badge {% if e.action_recommandee == 'ROLLBACK_MVOLA' %}text-bg-danger{% elif e.action_recommandee == 'CHOISIR_POSTING' %}text-bg-secondary{% else %}text-bg-warning{% endif %}">
+                    <span class="badge {% if e.action_recommandee == 'ROLLBACK_OM' %}text-bg-danger{% elif e.action_recommandee == 'CHOISIR_POSTING' %}text-bg-secondary{% else %}text-bg-warning{% endif %}">
                         {{ e.action_recommandee.label }}
                     </span>
                     {% else %}
@@ -30,7 +30,7 @@
                     </span>
                 </td>
                 <td>{{ e.detecte_le }}</td>
-                <td><a href="{% url 'ecarts:detail' e.pk %}" class="btn btn-sm btn-outline-secondary">Details</a></td>
+                <td><a href="{% url 'ecarts:om_detail' e.pk %}" class="btn btn-sm btn-outline-secondary">Details</a></td>
             </tr>
             {% empty %}
             <tr><td colspan="8" class="text-muted-debian">Aucun ecart.</td></tr>

@@ -1,28 +1,28 @@
 {% extends "base.html" %}
 
-{% block title %}Ecart {{ ecart.transid_mvola }} - interopRapprochement{% endblock %}
+{% block title %}Ecart {{ ecart.transid_om }} - interopRapprochement{% endblock %}
 
 {% block content %}
-<h1 class="h4 mb-3">Rapprochement MVOLA</h1>
-{% include "transactions/_mvola_tabs.html" %}
+<h1 class="h4 mb-3">Rapprochement Orange Money</h1>
+{% include "transactions/_om_tabs.html" %}
 
 <div class="d-flex justify-content-between align-items-center mb-3">
     <div>
-        <h2 class="h5 mb-1">Ecart {{ ecart.transid_mvola }}</h2>
-        <span class="badge {% if ecart.type_ecart == 'ORPHELINE_MVOLA' %}text-bg-warning{% elif ecart.type_ecart == 'DOUBLON_PAMF' %}text-bg-secondary{% else %}text-bg-info{% endif %}">
+        <h2 class="h5 mb-1">Ecart {{ ecart.transid_om }}</h2>
+        <span class="badge {% if ecart.type_ecart == 'ORPHELINE_OM' %}text-bg-warning{% elif ecart.type_ecart == 'DOUBLON_PAMF' %}text-bg-secondary{% else %}text-bg-info{% endif %}">
             {{ ecart.get_type_ecart_display }}
         </span>
         <span class="badge {% if ecart.statut == 'REGULARISE' %}text-bg-success{% elif ecart.statut == 'EN_COURS' %}text-bg-secondary{% else %}text-bg-danger{% endif %}">
             {{ ecart.get_statut_display }}
         </span>
         {% if ecart.action_recommandee %}
-        <span class="badge {% if ecart.action_recommandee == 'ROLLBACK_MVOLA' %}text-bg-danger{% elif ecart.action_recommandee == 'CHOISIR_POSTING' %}text-bg-secondary{% else %}text-bg-warning{% endif %}">
+        <span class="badge {% if ecart.action_recommandee == 'ROLLBACK_OM' %}text-bg-danger{% elif ecart.action_recommandee == 'CHOISIR_POSTING' %}text-bg-secondary{% else %}text-bg-warning{% endif %}">
             {{ ecart.action_recommandee.label }}
         </span>
         {% endif %}
         <span class="text-muted-debian small ms-2">detecte le {{ ecart.detecte_le }}</span>
     </div>
-    <a href="{% url 'ecarts:mvola_liste' %}" class="btn btn-outline-secondary btn-sm">Retour a la liste</a>
+    <a href="{% url 'ecarts:om_liste' %}" class="btn btn-outline-secondary btn-sm">Retour a la liste</a>
 </div>
 
 {% if ecart.action_recommandee == 'TICKET_ASPEKT' %}
@@ -33,21 +33,22 @@
         Aspekt/CBS, qui peut donc corriger le traitement. Creer un ticket Aspekt (hors de cette
         application) pour investigation/regularisation, puis enregistrer sa reference ci-dessous.
     </p>
-    <form method="post" action="{% url 'ecarts:enregistrer_ticket_aspekt' ecart.pk %}" class="row g-2 align-items-end">
+    <form method="post" action="{% url 'ecarts:om_enregistrer_ticket_aspekt' ecart.pk %}" class="row g-2 align-items-end">
         {% csrf_token %}
         <div class="col-md-8">{{ ticket_aspekt_form.reference }}</div>
         <div class="col-md-4"><button type="submit" class="btn btn-debian btn-sm">Enregistrer le ticket</button></div>
     </form>
 </div>
-{% elif ecart.action_recommandee == 'ROLLBACK_MVOLA' %}
+{% elif ecart.action_recommandee == 'ROLLBACK_OM' %}
 <div class="card p-3 mb-4 border-danger">
     <h3 class="h6">Action recommandee : <span class="badge text-bg-danger">{{ ecart.action_recommandee.label }}</span></h3>
     <p class="text-muted-debian small">
         Aucune ligne PAMF trouvee pour cette transaction : la requete n'a meme pas atteint
-        Aspekt, qui n'a donc rien a corriger de son cote. Le wallet MVOLA doit etre credite en
-        retour (rollback), a effectuer hors de cette application, puis confirme ci-dessous.
+        Aspekt, qui n'a donc rien a corriger de son cote. Le wallet Orange Money doit etre
+        credite en retour (rollback), a effectuer hors de cette application, puis confirme
+        ci-dessous.
     </p>
-    <form method="post" action="{% url 'ecarts:confirmer_rollback' ecart.pk %}" class="row g-2 align-items-end">
+    <form method="post" action="{% url 'ecarts:om_confirmer_rollback' ecart.pk %}" class="row g-2 align-items-end">
         {% csrf_token %}
         <div class="col-md-8">{{ rollback_form.reference }}</div>
         <div class="col-md-4"><button type="submit" class="btn btn-debian btn-sm">Confirmer le rollback effectue</button></div>
@@ -57,16 +58,17 @@
 <div class="card p-3 mb-4 border-secondary">
     <h3 class="h6">Action recommandee : <span class="badge text-bg-secondary">{{ ecart.action_recommandee.label }}</span></h3>
     <p class="text-muted-debian small">
-        Plusieurs lignes PAMF (postings CBS) correspondent a cette transaction MVOLA - le
-        paiement a probablement ete scinde sur plusieurs prets cote CBS. Choisissez ci-dessous la
-        ligne a retenir comme reference pour ce rapprochement.
+        Plusieurs lignes PAMF (postings CBS) correspondent a cette transaction Orange Money (les
+        remboursements scindes sur plusieurs prets sont normalement deja fusionnes automatiquement
+        - ce doublon a donc une autre origine). Choisissez ci-dessous la ligne a retenir comme
+        reference pour ce rapprochement.
     </p>
-    <form method="post" action="{% url 'ecarts:resoudre_doublon_pamf' ecart.pk %}">
+    <form method="post" action="{% url 'ecarts:om_resoudre_doublon_pamf' ecart.pk %}">
         {% csrf_token %}
         <div class="table-responsive mb-2">
             <table class="table table-sm align-middle">
                 <thead>
-                    <tr><th></th><th>rAutotransactionID</th><th>Heure</th><th>Note</th><th>Statut CBS</th></tr>
+                    <tr><th></th><th>rAutotransactionID</th><th>Heure</th><th>Montant</th><th>Note</th><th>Statut CBS</th></tr>
                 </thead>
                 <tbody>
                     {% for candidat in candidats_pamf %}
@@ -74,6 +76,7 @@
                         <td><input type="radio" name="transaction_pamf_id" value="{{ candidat.pk }}" {% if forloop.first %}checked{% endif %} required></td>
                         <td>{{ candidat.r_autotransaction_id }}</td>
                         <td>{{ candidat.time }}</td>
+                        <td>{% if candidat.montant is not None %}{{ candidat.montant }}{% else %}-{% endif %}</td>
                         <td>{{ candidat.note }}</td>
                         <td>
                             {% if candidat.is_success %}
@@ -95,22 +98,21 @@
 <div class="row g-3 mb-4">
     <div class="col-md-6">
         <div class="card p-3 h-100">
-            <h3 class="h6">Transaction MVOLA</h3>
-            {% if transaction_mvola %}
+            <h3 class="h6">Transaction Orange Money</h3>
+            {% if transaction_om %}
             <table class="table table-sm mb-0">
                 <tbody>
-                    <tr><th>TRANSID</th><td>{{ transaction_mvola.transid_mvola }}</td></tr>
-                    <tr><th>Date</th><td>{{ transaction_mvola.date_trans }}</td></tr>
-                    <tr><th>MSISDN</th><td>{{ transaction_mvola.msisdn }}</td></tr>
-                    <tr><th>Nom</th><td>{{ transaction_mvola.nom }}</td></tr>
-                    <tr><th>Montant</th><td>{{ transaction_mvola.amount }}</td></tr>
-                    <tr><th>Type</th><td>{{ transaction_mvola.type_operation }}</td></tr>
-                    <tr><th>Etat</th><td>{{ transaction_mvola.state }}</td></tr>
-                    <tr><th>ORIGFTID</th><td>{{ transaction_mvola.origftid }}</td></tr>
+                    <tr><th>TRANSID</th><td>{{ transaction_om.transid_om }}</td></tr>
+                    <tr><th>Date</th><td>{{ transaction_om.date_trans }}</td></tr>
+                    <tr><th>MSISDN</th><td>{{ transaction_om.msisdn }}</td></tr>
+                    <tr><th>Montant</th><td>{{ transaction_om.montant }}</td></tr>
+                    <tr><th>Service</th><td>{{ transaction_om.service }}</td></tr>
+                    <tr><th>Mode</th><td>{{ transaction_om.mode }}</td></tr>
+                    <tr><th>Statut</th><td>{{ transaction_om.statut }}</td></tr>
                 </tbody>
             </table>
             {% else %}
-            <p class="text-muted-debian mb-0">Aucune transaction MVOLA (orpheline PAMF).</p>
+            <p class="text-muted-debian mb-0">Aucune transaction Orange Money (orpheline PAMF).</p>
             {% endif %}
         </div>
     </div>
@@ -120,10 +122,11 @@
             {% if transaction_pamf %}
             <table class="table table-sm mb-2">
                 <tbody>
-                    <tr><th>TRANSID</th><td>{{ transaction_pamf.transid_mvola }}</td></tr>
+                    <tr><th>TRANSID</th><td>{{ transaction_pamf.transid_om }}</td></tr>
                     <tr><th>Date</th><td>{{ transaction_pamf.posting_date }}</td></tr>
                     <tr><th>rAutotransactionID</th><td>{{ transaction_pamf.r_autotransaction_id }}</td></tr>
                     <tr><th>Heure</th><td>{{ transaction_pamf.time }}</td></tr>
+                    <tr><th>Montant</th><td>{% if transaction_pamf.montant is not None %}{{ transaction_pamf.montant }}{% else %}-{% endif %}</td></tr>
                     <tr><th>Note</th><td>{{ transaction_pamf.note }}</td></tr>
                     <tr>
                         <th>Statut CBS</th>
@@ -144,7 +147,7 @@
             {% elif ecart.type_ecart == 'DOUBLON_PAMF' %}
             <p class="text-muted-debian mb-0">Plusieurs lignes PAMF trouvees pour cette transaction : voir le bloc "Choisir le posting PAMF de reference" ci-dessus.</p>
             {% else %}
-            <p class="text-muted-debian mb-0">Aucune transaction PAMF (orpheline MVOLA).</p>
+            <p class="text-muted-debian mb-0">Aucune transaction PAMF (orpheline Orange Money).</p>
             {% endif %}
         </div>
     </div>
@@ -154,7 +157,7 @@
     <div class="col-md-4">
         <div class="card p-3 h-100">
             <h3 class="h6">Changer le statut</h3>
-            <form method="post" action="{% url 'ecarts:changer_statut' ecart.pk %}">
+            <form method="post" action="{% url 'ecarts:om_changer_statut' ecart.pk %}">
                 {% csrf_token %}
                 {{ statut_form.nouveau_statut }}
                 <button type="submit" class="btn btn-debian btn-sm mt-2">Mettre a jour</button>
@@ -164,7 +167,7 @@
     <div class="col-md-4">
         <div class="card p-3 h-100">
             <h3 class="h6">Ajouter un commentaire</h3>
-            <form method="post" action="{% url 'ecarts:ajouter_commentaire' ecart.pk %}">
+            <form method="post" action="{% url 'ecarts:om_ajouter_commentaire' ecart.pk %}">
                 {% csrf_token %}
                 {{ commentaire_form.texte }}
                 <button type="submit" class="btn btn-debian btn-sm mt-2">Commenter</button>
@@ -174,7 +177,7 @@
     <div class="col-md-4">
         <div class="card p-3 h-100">
             <h3 class="h6">Ajouter une piece jointe</h3>
-            <form method="post" enctype="multipart/form-data" action="{% url 'ecarts:ajouter_piece_jointe' ecart.pk %}">
+            <form method="post" enctype="multipart/form-data" action="{% url 'ecarts:om_ajouter_piece_jointe' ecart.pk %}">
                 {% csrf_token %}
                 <div class="mb-2">{{ piece_jointe_form.fichier }}</div>
                 {{ piece_jointe_form.commentaire }}

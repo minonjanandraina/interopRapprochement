@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+
+{% block title %}Ecarts Orange Money - interopRapprochement{% endblock %}
+
+{% block content %}
+<h1 class="h4 mb-3">Rapprochement Orange Money</h1>
+{% include "transactions/_om_tabs.html" %}
+
+<div class="card p-3 mb-4">
+    <form hx-get="{% url 'ecarts:om_liste' %}" hx-target="#table-container"
+          hx-push-url="true" hx-trigger="submit, change" class="row g-2 align-items-end">
+        <div class="col-6 col-md-2">
+            <label class="form-label small mb-1">{{ form.date_min.label }}</label>
+            {{ form.date_min }}
+        </div>
+        <div class="col-6 col-md-2">
+            <label class="form-label small mb-1">{{ form.date_max.label }}</label>
+            {{ form.date_max }}
+        </div>
+        <div class="col-6 col-md-2">
+            <label class="form-label small mb-1">{{ form.transid_om.label }}</label>
+            {{ form.transid_om }}
+        </div>
+        <div class="col-6 col-md-3">
+            <label class="form-label small mb-1">{{ form.type_ecart.label }}</label>
+            {{ form.type_ecart }}
+        </div>
+        <div class="col-6 col-md-3">
+            <label class="form-label small mb-1">{{ form.statut.label }}</label>
+            {{ form.statut }}
+        </div>
+        <div class="col-6 col-md-3">
+            <label class="form-label small mb-1">{{ form.action_recommandee.label }}</label>
+            {{ form.action_recommandee }}
+        </div>
+        <div class="col-12">
+            <button type="submit" class="btn btn-debian btn-sm">Filtrer</button>
+            <a href="{% url 'ecarts:om_liste' %}" class="btn btn-outline-secondary btn-sm">Reinitialiser</a>
+        </div>
+    </form>
+</div>
+
+<div class="card p-3">
+    <div id="table-container">
+        {% include "ecarts/partials/liste_om_table.html" %}
+    </div>
+</div>
+{% endblock %}

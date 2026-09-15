@@ -7,6 +7,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, TestCase
 
 from transactions.csv_mvola import importer_fichier_mvola
+from transactions.models import TransactionPamf
 from transactions.services_rapprochement import lancer_rapprochement
 from transactions.tests import journee_cbs_terminee, make_csv, make_row
 from user import privileges
@@ -227,3 +228,78 @@ class TicketAspektViewTests(TestCase):
         self.assertEqual(entree.action, EcartHistorique.Action.TICKET_ASPEKT)
         self.assertEqual(entree.reference_externe, 'ASP-2026-00042')
         self.assertEqual(entree.auteur, self.user)
+
+
+class DoublonPamfViewTests(TestCase):
+    """cf. CLAUDE.md - decision du 2026-09-15 : un transid avec plusieurs postings PAMF n'est
+    plus resolu automatiquement, l'agent choisit le posting de reference depuis l'ecran de
+    l'ecart."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='op', email='op@example.com', password='x')
+        grant_privilege(self.user, privileges.TRAITER_ECARTS)
+        self.client = Client()
+        self.client.force_login(self.user)
+
+        fichier = make_csv('2026-09-07_reporting_PAMF.csv', [make_row(transid='SPLIT')])
+        importer_fichier_mvola(fichier, self.user)
+        with patch('transactions.services_pamf.fetch_transactions_pamf') as mock_fetch, \
+                patch('transactions.services_rapprochement.fetch_derniere_activite') as mock_derniere_activite:
+            mock_fetch.return_value = [
+                {'rAutotransactionID': 111, 'postingDate': date(2026, 9, 7), 'Time': '00:00:00',
+                 'Note': 'pret 1', 'TRANSID_MVOLA': 'SPLIT', 'responseBody': '', 'is_sucess': 1},
+                {'rAutotransactionID': 222, 'postingDate': date(2026, 9, 7), 'Time': '00:00:00',
+                 'Note': 'pret 2', 'TRANSID_MVOLA': 'SPLIT', 'responseBody': '', 'is_sucess': 0},
+            ]
+            mock_derniere_activite.return_value = journee_cbs_terminee(date(2026, 9, 7))
+            lancer_rapprochement(date(2026, 9, 7), self.user)
+        self.ecart = Ecart.objects.get(transid_mvola='SPLIT')
+
+    def test_ecart_avec_plusieurs_postings_recommande_de_choisir_le_posting(self):
+        self.assertEqual(self.ecart.action_recommandee, 'CHOISIR_POSTING')
+
+    def test_choisir_un_posting_cree_une_entree_historique_et_leve_laction_recommandee(self):
+        candidat = TransactionPamf.objects.get(transid_mvola='SPLIT', r_autotransaction_id='222')
+        resp = self.client.post(
+            f'/ecarts/mvola/ecarts/{self.ecart.pk}/resoudre-doublon/',
+            {'transaction_pamf_id': candidat.pk}, follow=True,
+        )
+        self.assertEqual(resp.status_code, 200)
+        entree = EcartHistorique.objects.get(ecart=self.ecart)
+        self.assertEqual(entree.action, EcartHistorique.Action.RESOLUTION_DOUBLON)
+        self.assertEqual(entree.reference_externe, '222')
+        self.assertEqual(entree.auteur, self.user)
+
+        self.ecart.resultat.refresh_from_db()
+        self.assertEqual(self.ecart.resultat.transaction_pamf_id, candidat.pk)
+        self.ecart.refresh_from_db()
+        self.assertIsNone(self.ecart.action_recommandee)
+
+    def test_choisir_un_posting_dun_autre_transid_est_refuse(self):
+        fichier2 = make_csv('2026-09-08_reporting_PAMF.csv', [make_row(transid='AUTRE', date_trans='08/09/2026 00:50:49')])
+        importer_fichier_mvola(fichier2, self.user)
+        with patch('transactions.services_pamf.fetch_transactions_pamf') as mock_fetch, \
+                patch('transactions.services_rapprochement.fetch_derniere_activite') as mock_derniere_activite:
+            mock_fetch.return_value = [
+                {'rAutotransactionID': 333, 'postingDate': date(2026, 9, 8), 'Time': '00:00:00',
+                 'Note': '', 'TRANSID_MVOLA': 'AUTRE', 'responseBody': '', 'is_sucess': 1},
+            ]
+            mock_derniere_activite.return_value = journee_cbs_terminee(date(2026, 9, 8))
+            lancer_rapprochement(date(2026, 9, 8), self.user)
+        posting_autre_transid = TransactionPamf.objects.get(transid_mvola='AUTRE')
+
+        resp = self.client.post(
+            f'/ecarts/mvola/ecarts/{self.ecart.pk}/resoudre-doublon/',
+            {'transaction_pamf_id': posting_autre_transid.pk},
+        )
+        self.assertEqual(resp.status_code, 404)
+
+    def test_sans_privilege_refuse(self):
+        autre_user = User.objects.create_user(username='sans-droit', email='sd@example.com', password='x')
+        self.client.force_login(autre_user)
+        candidat = TransactionPamf.objects.get(transid_mvola='SPLIT', r_autotransaction_id='111')
+        resp = self.client.post(
+            f'/ecarts/mvola/ecarts/{self.ecart.pk}/resoudre-doublon/',
+            {'transaction_pamf_id': candidat.pk},
+        )
+        self.assertEqual(resp.status_code, 403)

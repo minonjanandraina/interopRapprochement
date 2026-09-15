@@ -11,6 +11,7 @@ recalculer a neuf. C'est un choix assume (cf. Decisions prises) - le travail de 
 deja effectue sur une date n'est PAS conserve d'une relance a l'autre.
 """
 
+from collections import defaultdict
 from datetime import datetime, time
 
 from django.db import transaction as db_transaction
@@ -129,33 +130,45 @@ def lancer_rapprochement(date_cible, user):
     _purger_resultats_existants(rapprochement)
 
     mvola_par_id = {t.transid_mvola: t for t in TransactionMvola.objects.filter(date_trans__date=date_cible)}
-    pamf_par_id = {t.transid_mvola: t for t in TransactionPamf.objects.filter(posting_date=date_cible)}
-    tous_ids = set(mvola_par_id) | set(pamf_par_id)
+    pamf_groupes = defaultdict(list)
+    for t in TransactionPamf.objects.filter(posting_date=date_cible):
+        pamf_groupes[t.transid_mvola].append(t)
+    tous_ids = set(mvola_par_id) | set(pamf_groupes)
 
-    nb_success = nb_orph_mvola = nb_orph_pamf = 0
+    nb_success = nb_orph_mvola = nb_orph_pamf = nb_doublons_pamf = 0
     a_creer = []
     for transid in tous_ids:
         mvola = mvola_par_id.get(transid)
-        pamf = pamf_par_id.get(transid)
-        if mvola and pamf and pamf.is_success:
-            statut = ResultatRapprochement.Statut.SUCCESS
-            nb_success += 1
-        elif mvola:
-            # Orpheline MVOLA : soit une ligne PAMF existe mais en echec (is_success=False,
-            # ticket Aspekt a creer, la requete a atteint Aspekt), soit aucune ligne PAMF
-            # (rollback recommande cote MVOLA, la requete n'a pas atteint Aspekt).
-            # Cf. ResultatRapprochement.action_recommandee et CLAUDE.md.
-            statut = ResultatRapprochement.Statut.ORPHELINE_MVOLA
-            nb_orph_mvola += 1
-        elif pamf and not pamf.is_success:
-            # Absente cote MVOLA ET en echec cote PAMF : aucun mouvement d'argent ni d'un cote
-            # ni de l'autre (pas de debit wallet, transaction PAMF non postee) -> rien a
-            # rapprocher ni a regulariser. Exclue completement du resultat (pas de
-            # ResultatRapprochement, pas d'Ecart), cf. CLAUDE.md, decision du 2026-09-14.
-            continue
+        groupe_pamf = pamf_groupes.get(transid, [])
+
+        if len(groupe_pamf) > 1:
+            # Plusieurs postings CBS pour ce transid (paiement marchand scinde sur plusieurs
+            # prets, cf. CLAUDE.md) : ambigu, on ne tranche pas automatiquement - l'agent choisit
+            # le posting de reference depuis l'ecran de l'ecart (cf. action_recommandee).
+            statut = ResultatRapprochement.Statut.DOUBLON_PAMF
+            pamf = None
+            nb_doublons_pamf += 1
         else:
-            statut = ResultatRapprochement.Statut.ORPHELINE_PAMF
-            nb_orph_pamf += 1
+            pamf = groupe_pamf[0] if groupe_pamf else None
+            if mvola and pamf and pamf.is_success:
+                statut = ResultatRapprochement.Statut.SUCCESS
+                nb_success += 1
+            elif mvola:
+                # Orpheline MVOLA : soit une ligne PAMF existe mais en echec (is_success=False,
+                # ticket Aspekt a creer, la requete a atteint Aspekt), soit aucune ligne PAMF
+                # (rollback recommande cote MVOLA, la requete n'a pas atteint Aspekt).
+                # Cf. ResultatRapprochement.action_recommandee et CLAUDE.md.
+                statut = ResultatRapprochement.Statut.ORPHELINE_MVOLA
+                nb_orph_mvola += 1
+            elif pamf and not pamf.is_success:
+                # Absente cote MVOLA ET en echec cote PAMF : aucun mouvement d'argent ni d'un
+                # cote ni de l'autre (pas de debit wallet, transaction PAMF non postee) -> rien a
+                # rapprocher ni a regulariser. Exclue completement du resultat (pas de
+                # ResultatRapprochement, pas d'Ecart), cf. CLAUDE.md, decision du 2026-09-14.
+                continue
+            else:
+                statut = ResultatRapprochement.Statut.ORPHELINE_PAMF
+                nb_orph_pamf += 1
 
         a_creer.append(ResultatRapprochement(
             rapprochement=rapprochement, transid_mvola=transid,
@@ -167,10 +180,11 @@ def lancer_rapprochement(date_cible, user):
     ResultatRapprochement.objects.bulk_create(a_creer, batch_size=200)
 
     rapprochement.nb_mvola = len(mvola_par_id)
-    rapprochement.nb_pamf = len(pamf_par_id)
+    rapprochement.nb_pamf = len(pamf_groupes)
     rapprochement.nb_success = nb_success
     rapprochement.nb_orphelines_mvola = nb_orph_mvola
     rapprochement.nb_orphelines_pamf = nb_orph_pamf
+    rapprochement.nb_doublons_pamf = nb_doublons_pamf
     rapprochement.statut = Rapprochement.Statut.TERMINE
     rapprochement.save()
 

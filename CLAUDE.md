@@ -1,10 +1,10 @@
 # interopRapprochement
 
 ## Objectif
-Création d'une plateforme de réconciliation pour le service de transfert **WTB** (Wallet-to-Bank) et **BTW** (Bank-to-Wallet) avec **MVOLA**.
+Création d'une plateforme de réconciliation pour le service de transfert **WTB** (Wallet-to-Bank) et **BTW** (Bank-to-Wallet), initialement avec **MVOLA**, étendue à **Orange Money** (cf. section dédiée plus bas). `Airtel Money` reste anticipé en placeholder dans l'interface.
 
-Deux sources de transactions à rapprocher (clé de jointure : `TRANSID_MVOLA`) :
-1. Export CSV MVOLA (voir ci-dessous)
+Pour chaque service, deux sources de transactions à rapprocher (clé de jointure : `TRANSID_MVOLA` / `transid_om` selon le service) :
+1. Export du wallet mobile money (CSV pour MVOLA, XLS pour Orange Money — voir sections dédiées)
 2. Base CBS (SQL Server) côté PAMF (voir ci-dessous)
 
 ## Source 1 : transactions MVOLA (CSV)
@@ -70,6 +70,73 @@ def getCon():
     return pyodbc.connect(connection_string)
 ```
 > ⚠️ Identifiants en clair ici à titre de référence pour le dev. En Django, les externaliser via variables d'environnement (`django-environ` / `.env`, jamais committé).
+
+## Service Orange Money (OM)
+
+Même pipeline que MVOLA (import fichier → requête CBS → rapprochement bulk → écarts →
+notifications, cf. "Décisions prises" et Sprints ci-dessous), avec deux sources différentes.
+Clé de jointure : `transid_om` (alias SQL `TRANSID_ORANGE_MONEY`, équivalent de `TRANSID_MVOLA`).
+
+### Source 1 : transactions Orange Money (XLS)
+
+- Emplacement : `/input/*`
+- Nom de fichier : `Daily-ChannelUserTransactionReport-<compte>-YYYYMMDD.xls` (ex. :
+  `Daily-ChannelUserTransactionReport-0324660679-20260907.xls`, date en fin de nom).
+- Format : `.xls` binaire legacy (BIFF/OLE2, pas un `.csv`) — lu avec `xlrd` (`openpyxl` ne
+  supporte que `.xlsx`). Le fichier est un relevé de rapport : ~22 lignes d'en-tête de
+  métadonnées, puis un tableau avec des lignes d'en-tête de colonnes répétées à chaque section et
+  des lignes de sous-total/section (`Total`, `Solde`) intercalées entre les lignes de
+  transaction.
+- Repérage des lignes de données : la cellule de la colonne A (`N°`) est de type numérique xlrd
+  pour une vraie ligne de transaction, et vide/textuelle pour toutes les autres lignes (en-têtes,
+  séparateurs, sections, totaux/soldes) — critère vérifié fiable sur fichier réel, utilisé plutôt
+  que de repérer la position de l'en-tête (qui varie selon le nombre de sections).
+- Colonnes (0-indexées) :
+
+  | Colonne | Description |
+  |---|---|
+  | A | N° (numéro de ligne du relevé) |
+  | B | Date (texte `dd/mm/yyyy`) |
+  | C | Heure (texte `HH:MM:SS`) |
+  | D | Référence transactionnelle OM — **clé de rapprochement** (`transid_om`), équivalent du `RequestID` côté CBS |
+  | E | Service (ex. `Merchant Payment`) |
+  | F | Paiement |
+  | G | Statut — **seules les lignes `Succès` sont importées**, les lignes `Echec` sont comptées (`nb_hors_succes`) et ignorées |
+  | H | Mode/canal (USSD / application OM) |
+  | I | N° de compte technique (agent) |
+  | J | Wallet (agent) |
+  | K | N° Pseudo |
+  | L | **MSISDN client** |
+  | M | Wallet (correspondant) |
+  | N | Débit |
+  | O | **Crédit — montant à rapprocher** |
+  | P | Commissions (MGA) |
+  | Q | Sous-réseau (non utilisé) |
+
+- Colonnes E, F, H, I, J, K, M, N, P non utilisées pour le rapprochement mais conservées pour
+  l'audit (mêmes principes que MVOLA qui stocke `SOLDE_PIVOT_AVANT`/`APRES` sans s'en servir pour
+  matcher).
+
+### Source 2 : transactions PAMF pour Orange Money (base CBS / SQL Server)
+
+Même requête que MVOLA (cf. Source 2 MVOLA ci-dessus) avec `rMerchantID = 9` (Orange Money, au
+lieu de 13 pour MVOLA) et alias `TRANSID_ORANGE_MONEY` :
+```sql
+select
+  mc.rAutotransactionID,
+  isnull(mc.postingDate, cast(al.RequestDateCreated as date)) as postingDate,
+  mc.Time,
+  mc.Note,
+  al.RequestID as TRANSID_ORANGE_MONEY,
+  al.responseBody,
+  case when mc.Status = 3 then 1 else 0 end as is_sucess
+from bagsPAMF_CBS_MC.dbo.apiLog al
+left join cbs.dbo.mcTransaction mc on mc.requestID = al.apiLogID and mc.rMerchantID = 9
+where al.rMerchantID = 9 and al.apiServiceId in (302, 303, 700) and cast(al.RequestDateCreated as date) = ?
+```
+- Structure et sémantique identiques à MVOLA (`is_success` dérivé de `Status = 3`, `left join`
+  pour ne pas perdre les lignes `apiLog` sans correspondance `mcTransaction`, cf. décision du
+  2026-09-14 rappelée en Source 2 MVOLA).
 
 ## Serveur mail (notifications)
 
@@ -141,7 +208,7 @@ _Aucun point ouvert pour le moment._
   - aucune ligne PAMF trouvée → la requête **n'a même pas atteint** Aspekt : il n'a rien à corriger de son côté, un ticket serait inutile → **`ROLLBACK_MVOLA`** : le wallet doit être crédité en retour côté MVOLA. Notre système n'a pas d'accès en écriture à MVOLA (sources en lecture seule) : l'écran affiche la recommandation, l'agent effectue le rollback ailleurs puis clique "Confirmer le rollback effectué" (trace une entrée `EcartHistorique` de type `ROLLBACK_CONFIRME`, avec référence/commentaire libre).
   - Ces deux actions réutilisent le mécanisme d'historique du Sprint 4 plutôt que d'introduire un nouveau modèle de suivi.
   - Validé sur données réelles : après la mise à jour de la requête CBS (suppression du filtre `Status=3`), 17 transactions du 2026-09-07 jusque-là classées `ORPHELINE_MVOLA` sans aucune ligne PAMF se sont révélées avoir en réalité une ligne PAMF en échec → recommandation correcte `TICKET_ASPEKT` (Aspekt a la transaction, peut la corriger), confirmant l'intérêt du changement de requête pour ne pas laisser ces cas sans ticket alors qu'Aspekt peut agir dessus.
-- **Organisation de l'interface : sidebar par service.** La navigation principale est une sidebar listant les services de rapprochement : `MVOLA` (actif aujourd'hui), avec `Orange Money` et `Airtel Money` déjà présents en placeholder "bientôt disponible" pour anticiper leur ajout futur. L'écran d'un service est organisé en onglets : `Import <service>` et `Lancement rapprochement`. Ce dernier affiche la liste des rapprochements (un par date, avec les compteurs MVOLA / PAMF / rapprochées / orphelines) et un bouton "Détails" qui ouvre un modal Bootstrap chargé via HTMX, avec 3 sous-onglets paginés (HTMX) : transactions MVOLA, transactions PAMF, orphelines.
+- **Organisation de l'interface : sidebar par service.** La navigation principale est une sidebar listant les services de rapprochement : `MVOLA` et `Orange Money` (actifs), `Airtel Money` toujours en placeholder "bientôt disponible" pour anticiper son ajout futur. L'écran d'un service est organisé en onglets : `Import <service>` et `Lancement rapprochement`. Ce dernier affiche la liste des rapprochements (un par date, avec les compteurs transactions service / PAMF / rapprochées / orphelines) et un bouton "Détails" qui ouvre un modal Bootstrap chargé via HTMX, avec 3 sous-onglets paginés (HTMX) : transactions du service, transactions PAMF, orphelines.
 - **Destinataires des notifications email.** Utilisateurs actifs (`is_active`) avec `is_email_verified=True` (inscription standard via le module `user`), **ou** `is_staff=True` (comptes admin/superuser créés hors du flux d'inscription, qui ne passent jamais par la validation email). Pas encore de préférences de notification par utilisateur ni de ciblage par rôle — à revoir au Sprint 6 quand les rôles dynamiques existeront.
 - **Export Excel/PDF sur les tableaux, avec entête de rapport.** Chaque tableau de consultation (Transactions MVOLA, Transactions PAMF, Ecarts) et chacun des 3 sous-onglets du modal de détail d'un rapprochement (MVOLA/PAMF/orphelines) affiche desormais un bloc d'entête au-dessus du tableau (module source de l'extraction, filtres actuellement appliqués, nombre total de lignes, utilisateur et horodatage de génération) et deux boutons "Export Excel"/"Export PDF". Infrastructure commune dans `core.reports` (`build_meta`, `decrire_filtres`, `urls_export`, `export_excel`/`export_pdf`/`exporter`), réutilisée par `transactions` et `ecarts` — chaque écran définit juste ses colonnes `[(libellé, fonction d'extraction), ...]`.
   - L'export relance la même requête filtrée que l'écran (les fonctions `_filtrer_*` sont partagées entre la vue d'affichage et la vue d'export) mais **sans pagination** : toutes les lignes correspondant aux filtres sont exportées, pas seulement la page HTMX affichée.
@@ -151,6 +218,27 @@ _Aucun point ouvert pour le moment._
   - Création (`UtilisateurCreationForm`, formulaire dédié — pas le flux d'inscription publique) : l'admin définit username/email/nom/prénom/mot de passe et les rôles directement. Le compte est créé **actif immédiatement** avec `is_email_verified=True` : contrairement à l'auto-inscription (module `user`, validation par email obligatoire), un compte créé par un admin n'a pas besoin de repasser par l'activation par email — l'admin vouche pour la personne.
   - Activer/désactiver (`is_active`) : un bouton bascule l'état ; un compte désactivé ne peut plus se connecter (vérifié par `ModelBackend` nativement, aucune logique custom nécessaire). Garde-fou : un administrateur ne peut pas désactiver son propre compte (évite un auto-verrouillage), le bouton est simplement masqué sur sa propre ligne et la vue re-vérifie côté serveur.
   - Changement de mot de passe : réinitialisation **côté admin uniquement** (`DefinirMotDePasseForm`, basé sur `django.contrib.auth.forms.SetPasswordForm` — ne demande pas l'ancien mot de passe). Pas de page "changer mon propre mot de passe" en self-service pour l'instant (décision explicite, à revoir si le besoin apparaît).
+- **Ajout du service Orange Money (OM) : duplication plutôt que généralisation.** Même pipeline que MVOLA (import → requête CBS → rapprochement bulk → écarts → notifications), implémenté par des modèles/vues/URLs parallèles suffixés `OM`/`om` (`TransactionOM`, `TransactionPamfOM`, `RapprochementOM`, `ResultatRapprochementOM`, `EcartOM`, `EcartHistoriqueOM`, app `ecarts.services_om`) plutôt qu'une généralisation de `Rapprochement`/`ResultatRapprochement`/`Ecart` avec un champ `service`. Cohérent avec le code existant qui ne généralisait déjà rien entre les deux sources d'une même réconciliation (`TransactionMvola`/`TransactionPamf` sont deux modèles concrets distincts) ; évite aussi de toucher au code MVOLA déjà validé sur données réelles. Les briques déjà génériques sont réutilisées telles quelles : `core.reports`/`core.pagination`/`core.htmx`, la vérification "journée CBS terminée" (`JourneeCbsNonTerminee`, `fetch_derniere_activite`, indépendante du marchand), et les formulaires d'action sur un écart (`CommentaireForm`, `ChangerStatutForm`, `PieceJointeForm`, `TicketAspektForm`, `RollbackConfirmeForm`).
+  - Nouveau privilège dédié `importer_fichier_om` (catalogue `user.privileges`, distinct de `importer_csv_mvola`) : format source différent (XLS vs CSV), donc geste d'import distinct à autoriser séparément. `lancer_rapprochement` et `traiter_ecarts` restent partagés entre MVOLA et OM (déjà nommés génériquement, pas de suffixe service).
+  - Import OM : le fichier `.xls` (legacy BIFF/OLE2, lu via `xlrd` — `openpyxl` ne supporte que `.xlsx`) est un relevé de rapport avec des lignes d'en-tête/section/sous-total intercalées ; le parseur (`transactions.xls_om`) isole les vraies lignes de transaction par le type de cellule (numérique) de la colonne N°, et ne conserve que les lignes `Statut = Succès` (comptage séparé `nb_hors_succes` pour les lignes `Echec`, pas une erreur).
+  - Validé sur données réelles (`input/Daily-ChannelUserTransactionReport-0324660679-20260907.xls`) : 190 lignes de transaction détectées (31 `Echec` + 159 `Succès`), 159 lignes importées.
+- **Paiement scindé sur plusieurs prêts côté CBS : plusieurs postings pour un même transid, résolution manuelle (pas d'agrégation automatique).** Incident réel du 08/09/2026 côté Orange Money (`IntegrityError` sur `TransactionPamfOM.transid_om`, alors unique) : un paiement marchand peut être posté par le CBS sur **plusieurs `mcTransaction`** (un `rAutotransactionID` par prêt réglé, visible dans `responseBody.Body.LoanList`) tout en partageant le même `RequestID`/transid. L'utilisateur a confirmé (requête CBS testée en `SELECT DISTINCT`) que le même phénomène existe côté **MVOLA** — ce ne sont pas des doublons exacts éliminables par `DISTINCT`, mais de vraies lignes différentes. `TransactionPamf(OM).transid_mvola/transid_om` ne sont donc plus uniques (contrainte déplacée sur le couple `(transid, rAutotransactionID)` pour les deux services), et le dédoublonnage à l'import (`services_pamf(_om).importer_transactions_pamf(_om)`) se fait sur cette même paire.
+  - **Décision (remplace une première version auto-agrégée du 2026-09-15, explicitement rollback à la demande de l'utilisateur) : aucune résolution automatique.** Dès qu'un transid a plus d'une ligne `TransactionPamf(OM)` pour la date rapprochée, le moteur (`lancer_rapprochement`/`lancer_rapprochement_om`) crée un `ResultatRapprochement(OM)` de statut `DOUBLON_PAMF` (`transaction_pamf` laissé `NULL`), génère un `Ecart(OM)` de type `DOUBLON_PAMF` avec action recommandée `CHOISIR_POSTING` — cela prime sur toute autre règle (y compris l'exclusion "absente + échec"). Sur l'écran de détail de l'écart, l'agent voit tous les postings candidats (rAutotransactionID, heure, note, statut CBS) et choisit celui à retenir ; le choix est tracé en `EcartHistorique(OM)` (action `RESOLUTION_DOUBLON`, `reference_externe` = rAutotransactionID choisi), sans recalcul automatique du statut ensuite — `DOUBLON_PAMF` reste un marqueur historique de l'ambiguïté initiale, et l'écart se traite/se clôture normalement (DETECTE/EN_COURS/REGULARISE) comme n'importe quel autre écart.
+  - `Rapprochement(OM).nb_pamf` compte des transids distincts (transactions métier), pas des lignes `TransactionPamf(OM)` brutes — cohérent avec `nb_mvola`/`nb_om`. Un nouveau compteur `nb_doublons_pamf` est affiché à côté des compteurs existants (historique des rapprochements, modal de détail).
+  - Revalidé sur données réelles (Orange Money, 2026-09-08, 2 paiements scindés, tous postings réussis) : classés `DOUBLON_PAMF`/`CHOISIR_POSTING` au lieu d'être auto-résolus en `SUCCESS`.
+- **Cause racine identifiée des postings scindés Orange Money : `repaymentByAlias` (`apiServiceId=303`, remboursement sans montant précisé) → CBS scinde automatiquement sur les prêts actifs échus à cette date.** Le `DOUBLON_PAMF` ci-dessus reste le filet de sécurité général (`apiServiceId` 302/700, ou tout autre cas imprévu), mais ce cas précis est **connu et non ambigu** : `mc.AmountCRY` de chaque posting correspond exactement au montant du prêt associé dans `responseBody.Body.LoanList` (vérifié sur 2026-09-08 : 31785.61+40414.39=72200.00 et 259784.45+215.55=260000.00). `REQUETE_PAMF_OM` (`transactions/cbs.py`) est donc un `UNION ALL` de 2 branches : `apiServiceId=303` est agrégé en SQL par `RequestID` (`SUM(mc.AmountCRY)`, `Note` = concaténation des `Note` par prêt via `FOR XML PATH` — `STRING_AGG` indisponible, CBS tourne en SQL Server 2016 —, succès seulement si **tous** les postings du groupe ont réussi, `rAutotransactionID` = le plus petit des postings du groupe comme référence), `apiServiceId` 302/700 restent renvoyés ligne par ligne (comportement inchangé, doublon éventuel toujours géré par `DOUBLON_PAMF`). `fetch_transactions_pamf_om` passe désormais la date deux fois (une par branche de l'`UNION ALL`).
+  - Nouveau champ `TransactionPamfOM.montant` (le montant CBS, `AmountCRY` sommé pour un remboursement scindé), affiché dans l'écran de détail d'écart, la liste "Transactions PAMF" et son export. Pas encore utilisé dans la logique de rapprochement (le matching reste basé sur la seule présence/absence du transid), simple donnée d'audit pour l'instant.
+  - MVOLA (`rMerchantID=13`) utilise vraisemblablement le même `apiServiceId=303`, mais aucun cas réel de scission n'a été constaté sur les dates vérifiées (2026-09-11) : `REQUETE_PAMF` (MVOLA) n'a **pas** été modifiée pour l'instant — à revoir si un incident similaire y est constaté.
+  - Revalidé sur données réelles (Orange Money, 2026-09-08, après réimport avec la requête agrégée) : les 2 paiements scindés sont désormais classés `SUCCESS` directement (`nb_doublons_pamf` repassé à 0, `nb_success` 121→123).
+- **`mc.Status != 3` ne suffit pas à conclure à un échec côté PAMF : certaines transactions sont malgré tout postées sur les comptes clients.** Signalé par l'utilisateur le 2026-09-15 avec une requête de vérification (`cbs.dbo.accAccountTransaction` filtrée sur `debitCredit = -1` et `rTransactionTypeID in (1511, 1512, 1613, 1328, 1329)`, `UNION` avec `cbs.dbo.loLoanCredit`, par `postingDate`) qui liste, tous marchands confondus, les `rAutoTransactionID` ayant réellement mouvementé un compte (courant/épargne/prêt) ce jour-là — y compris des transferts compte-à-compte, dépôts en agence, etc., sans lien avec MVOLA/OM : cette requête sert uniquement de filtre de correspondance sur `rAutoTransactionID`, jamais de source de vérité seule.
+  - **`REQUETE_PAMF`/`REQUETE_PAMF_OM` (`transactions/cbs.py`) intègrent désormais cette vérification via une CTE `MouvementsCompte`** (mêmes deux tables/conditions que la requête de l'utilisateur, filtrée sur la date interrogée) jointe sur `rAutoTransactionID` : `is_sucess` passe à 1 dès que `mc.Status = 3` **ou** que la ligne apparaît dans `MouvementsCompte`, même si `Status != 3`. Pour la branche agrégée `apiServiceId=303` (OM), ce critère élargi s'applique posting par posting *avant* le `min()` par groupe — la règle "succès seulement si tous les postings du remboursement scindé ont réussi" reste inchangée, seule la définition du succès d'un posting individuel est élargie.
+  - Conséquence sur `ResultatRapprochement(OM).action_recommandee` : une transaction jusque-là classée `ORPHELINE_MVOLA`/`ORPHELINE_OM` avec recommandation `TICKET_ASPEKT` (PAMF présente mais `is_success=False`) peut désormais ressortir directement `SUCCESS` (rapprochée) si le mouvement de compte est trouvé — corrige un faux écart, pas seulement une recommandation.
+  - `fetch_transactions_pamf` passe désormais la date 3 fois (2× pour la CTE, 1× pour le `where` principal) ; `fetch_transactions_pamf_om` la passe 4 fois (2× pour la CTE partagée par les 2 branches de l'`UNION ALL`, puis 1× par branche).
+  - Non encore revalidé sur données réelles à ce stade (pas d'accès CBS depuis cet environnement) — à confirmer par l'utilisateur sur une date connue pour avoir des orphelines `Status != 3` mais un mouvement de compte réel.
+- **`apiLog.rMerchantID`/`apiLog.apiServiceId` peuvent eux-mêmes être corrompus (constaté à `0`/`0` sur une ligne réelle du 2026-09-07, `RequestURL` = `/api/loanRepaymentByAlias/...`), alors que le `mcTransaction` associé porte bien le vrai `rMerchantID` (9) et a été posté (`Status=3`).** Comme `REQUETE_PAMF`/`REQUETE_PAMF_OM` filtrent sur les colonnes d'`apiLog`, une telle ligne disparaissait entièrement du résultat malgré une transaction réellement postée côté CBS — l'utilisateur a d'abord tenté `(al.rMerchantID = 9 or mc.rMerchantID = 9)` seul, insuffisant car `al.apiServiceId = 0` échouait toujours le filtre `apiServiceId in (302, 303, 700)`/`= 303`.
+  - **Filtre marchand** : repli sur `mc.rMerchantID` quand `al.rMerchantID` ne correspond pas (`al.rMerchantID = 13/9 or mc.rMerchantID = 13/9`) — fiable car le `LEFT JOIN` relie `mc` à **cette** ligne `apiLog` précise via `mc.requestID = al.apiLogID`, pas une corrélation approximative.
+  - **Filtre service** : repli sur `al.RequestURL like '%/loanRepaymentByAlias/%'` (colonne non affectée par cette corruption) pour reconnaître un appel équivalent à `apiServiceId=303`, en plus du test exact sur `apiServiceId`. Appliqué à `REQUETE_PAMF` (MVOLA, filtre unique) et à la seule branche `303` agrégée de `REQUETE_PAMF_OM` — **pas** à la branche `302/700`, qui n'a pas ce problème constaté et où un repli large créerait un doublon avec la ligne déjà captée par la branche `303`.
+  - Portée volontairement limitée à ce cas précis (repaymentByAlias) faute de connaître le pattern d'URL des autres `apiServiceId` (302, 700) : une corruption `0/0` sur un appel qui ne serait pas un repaiement reste un angle mort non couvert, à revoir si constaté.
 
 ## Sprints de développement
 
@@ -199,12 +287,19 @@ _Aucun point ouvert pour le moment._
 - Non fait, jugé non nécessaire pour l'instant : passage en tâche de fond (Django-Q/Celery). Le moteur de rapprochement reste synchrone dans la requête HTTP — acceptable vu le nombre de requêtes quasi constant obtenu au Sprint 2 (~17-18 quel que soit le volume/jour). A reconsidérer seulement si un besoin concret apparaît (delai perçu par l'utilisateur, timeout HTTP).
 
 ### Sprint 6 — Rôles dynamiques, permissions & finitions (en cours)
-- [x] Modèle `Role`/`Permission` dynamique (app `user`) : `Role` custom (pas les `Group`/`Permission` natifs de Django, choix explicite de l'utilisateur) avec M2M `permissions`, et M2M `User.roles`. `Permission` est un catalogue **fixe** de 5 privilèges (`user.privileges.PRIVILEGE_CHOICES`), seedé par une migration de données (`user.0003_seed_privileges`) — pas une liste ouverte à la création par l'utilisateur, seule leur répartition entre rôles est dynamique : `importer_csv_mvola`, `lancer_rapprochement`, `traiter_ecarts`, `gerer_roles`, `gerer_utilisateurs`
+- [x] Modèle `Role`/`Permission` dynamique (app `user`) : `Role` custom (pas les `Group`/`Permission` natifs de Django, choix explicite de l'utilisateur) avec M2M `permissions`, et M2M `User.roles`. `Permission` est un catalogue **fixe** de privilèges (`user.privileges.PRIVILEGE_CHOICES`), seedé par des migrations de données (`user.0003_seed_privileges`, complété au Sprint 7 par `0005_seed_importer_fichier_om`) — pas une liste ouverte à la création par l'utilisateur, seule leur répartition entre rôles est dynamique : `importer_csv_mvola`, `importer_fichier_om`, `lancer_rapprochement`, `traiter_ecarts`, `gerer_roles`, `gerer_utilisateurs`
 - [x] `User.has_privilege(code)` : `True` sans condition pour un superuser, sinon vérifie les `Role` assignés. Vues gatées via le décorateur `user.decorators.privilege_required(code)` (403 si connecté mais sans le privilège, redirection login si anonyme) plutôt que le simple `@login_required` : `mvola_import`/`mvola_rapprochement` (transactions), et les 5 vues d'action de `ecarts` (commentaire, changement de statut, pièce jointe, ticket Aspekt, rollback confirmé). Les vues de **consultation** (listes MVOLA/PAMF/écarts, détail d'un écart, modal de détail d'un rapprochement) restent en `@login_required` simple, ouvertes à tout utilisateur connecté
 - [x] Interface dédiée (app `user`, pas seulement l'admin Django) : `/compte/roles/` (liste + création + édition des privilèges via checkboxes + suppression), `/compte/utilisateurs/` (liste + assignation des rôles par utilisateur). Suppression d'un rôle bloquée (message d'erreur, pas d'exception) tant qu'il est assigné à au moins un utilisateur, cf. décision initiale. Egalement enregistrées dans l'admin Django (`Role`/`Permission`, `User.roles` en `filter_horizontal`) pour un accès de secours
 - [x] Sidebar : nouvelle section "Administration" (sous les services), avec les liens "Rôles"/"Utilisateurs" affichés uniquement si l'utilisateur connecté a respectivement `gerer_roles`/`gerer_utilisateurs` (`User.peut_gerer_roles`/`peut_gerer_utilisateurs`, utilisés côté template car `has_privilege` prend un argument)
 - [x] Migration de données `0003_seed_privileges` : crée aussi un rôle `Administrateur` (les 5 privilèges) et l'assigne à tous les superusers existants au moment de la migration — évite qu'un superuser existant (ex. compte `admin` réel utilisé en dev) se retrouve verrouillé hors des fonctionnalités qu'il utilisait déjà avant l'introduction des privilèges
 - [x] Durcissement sécurité : déjà en place depuis le Sprint 0/1 (secrets via `.env`, jamais committé) — vérifié à nouveau ici. Accès CBS confirmé lecture seule : `transactions/cbs.py` n'exécute qu'un unique `SELECT` (`fetch_transactions_pamf`), aucune écriture n'existe dans le code vers la base CBS
 - [ ] Polish UI/UX (design Debian 13) au-delà des nouveaux écrans roles/utilisateurs, documentation utilisateur
+
+### Sprint 7 — Service Orange Money (OM) ✅ terminé
+- [x] Reproduction complète du pipeline MVOLA pour Orange Money (import fichier `.xls` → requête CBS `rMerchantID=9` → rapprochement bulk sur `transid_om` → écarts → notifications → exports), par duplication de modèles/vues/URLs/templates plutôt que généralisation (cf. "Décisions prises")
+- [x] Parseur XLS dédié (`transactions.xls_om`) : filtre `Statut = Succès`, ignore les lignes de section/sous-total/en-tête répétées du relevé (repérage par type de cellule, pas par position), validé sur le fichier réel `input/Daily-ChannelUserTransactionReport-0324660679-20260907.xls` (159 lignes `Succès` importées sur 190 lignes de transaction)
+- [x] Nouveau privilège `importer_fichier_om` (distinct de `importer_csv_mvola`), `lancer_rapprochement`/`traiter_ecarts` réutilisés tels quels (déjà génériques)
+- [x] Sidebar : `Orange Money` passe de placeholder à service actif ; `Airtel Money` reste en placeholder
+- [x] Tests dédiés (`transactions.tests_om`, `ecarts.tests_om`) couvrant le parsing XLS sur données réelles, le moteur de rapprochement OM (3 statuts, cas exclu, action recommandée, relance destructive), les actions de traitement d'écart OM, le gating des privilèges, et un filet de sécurité "smoke test" sur tous les écrans/exports OM
 
 > Sprints indicatifs, à ajuster selon les réponses aux "Points à clarifier" ci-dessus.

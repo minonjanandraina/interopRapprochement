@@ -55,3 +55,32 @@ def notifier_nouveaux_ecarts(rapprochement, ecarts):
             "Echec de l'envoi de la notification de nouveaux ecarts pour le rapprochement du %s",
             rapprochement.date,
         )
+
+
+def notifier_nouveaux_ecarts_om(rapprochement, ecarts):
+    """Miroir de notifier_nouveaux_ecarts (MVOLA) pour le service Orange Money."""
+    if not ecarts:
+        return
+
+    destinataires = _destinataires()
+    if not destinataires:
+        return
+
+    message = render_to_string('ecarts/emails/nouveaux_ecarts_om.txt', {
+        'rapprochement': rapprochement,
+        'ecarts': ecarts,
+        'site_base_url': settings.SITE_BASE_URL,
+    })
+
+    try:
+        send_mail(
+            subject=f"[interopRapprochement] {len(ecarts)} nouvel(le)s ecart(s) Orange Money detecte(s) - {rapprochement.date}",
+            message=message,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=destinataires,
+        )
+    except Exception:
+        logger.exception(
+            "Echec de l'envoi de la notification de nouveaux ecarts Orange Money pour le rapprochement du %s",
+            rapprochement.date,
+        )

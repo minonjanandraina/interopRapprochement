@@ -74,3 +74,42 @@ class FiltrePamfForm(forms.Form):
     is_success = forms.ChoiceField(required=False, label='Statut CBS',
                                     choices=[('', 'Tous'), ('1', 'Succes'), ('0', 'Echec')],
                                     widget=forms.Select(attrs={'class': 'form-select form-select-sm'}))
+
+
+class ImportOMForm(forms.Form):
+    fichier = forms.FileField(
+        label='Fichier Orange Money',
+        help_text='Format attendu : Daily-ChannelUserTransactionReport-<compte>-YYYYMMDD.xls',
+        widget=forms.ClearableFileInput(attrs={'class': 'form-control', 'accept': '.xls'}),
+    )
+
+    def clean_fichier(self):
+        fichier = self.cleaned_data['fichier']
+        if not fichier.name.lower().endswith('.xls'):
+            raise forms.ValidationError("Le fichier doit avoir l'extension .xls.")
+        return fichier
+
+
+class FiltreOMForm(forms.Form):
+    date_min = forms.DateField(required=False, label='Du',
+                                widget=forms.DateInput(attrs={'type': 'date', 'class': 'form-control form-control-sm'}))
+    date_max = forms.DateField(required=False, label='Au',
+                                widget=forms.DateInput(attrs={'type': 'date', 'class': 'form-control form-control-sm'}))
+    transid_om = forms.CharField(required=False, label='Reference OM',
+                                  widget=forms.TextInput(attrs={'class': 'form-control form-control-sm'}))
+    msisdn = forms.CharField(required=False, label='MSISDN',
+                              widget=forms.TextInput(attrs={'class': 'form-control form-control-sm'}))
+
+
+class FiltrePamfOMForm(forms.Form):
+    date_min = forms.DateField(required=False, label='Du',
+                                widget=forms.DateInput(attrs={'type': 'date', 'class': 'form-control form-control-sm'}))
+    date_max = forms.DateField(required=False, label='Au',
+                                widget=forms.DateInput(attrs={'type': 'date', 'class': 'form-control form-control-sm'}))
+    transid_om = forms.CharField(required=False, label='Reference OM',
+                                  widget=forms.TextInput(attrs={'class': 'form-control form-control-sm'}))
+    r_autotransaction_id = forms.CharField(required=False, label='rAutotransactionID',
+                                            widget=forms.TextInput(attrs={'class': 'form-control form-control-sm'}))
+    is_success = forms.ChoiceField(required=False, label='Statut CBS',
+                                    choices=[('', 'Tous'), ('1', 'Succes'), ('0', 'Echec')],
+                                    widget=forms.Select(attrs={'class': 'form-select form-select-sm'}))

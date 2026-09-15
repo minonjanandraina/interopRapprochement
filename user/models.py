@@ -4,6 +4,7 @@ from django.db import models
 from .privileges import GERER_ROLES as PRIVILEGE_GERER_ROLES
 from .privileges import GERER_UTILISATEURS as PRIVILEGE_GERER_UTILISATEURS
 from .privileges import IMPORTER_CSV_MVOLA as PRIVILEGE_IMPORTER_CSV_MVOLA
+from .privileges import IMPORTER_FICHIER_OM as PRIVILEGE_IMPORTER_FICHIER_OM
 from .privileges import LANCER_RAPPROCHEMENT as PRIVILEGE_LANCER_RAPPROCHEMENT
 from .privileges import PRIVILEGE_CHOICES
 
@@ -55,6 +56,10 @@ class User(AbstractUser):
     @property
     def peut_importer_csv_mvola(self):
         return self.has_privilege(PRIVILEGE_IMPORTER_CSV_MVOLA)
+
+    @property
+    def peut_importer_fichier_om(self):
+        return self.has_privilege(PRIVILEGE_IMPORTER_FICHIER_OM)
 
     @property
     def peut_lancer_rapprochement(self):

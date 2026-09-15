@@ -1,24 +1,23 @@
 <div class="lignes-container">
     {% include "core/_rapport_entete.html" %}
-    {% if type_donnee == 'mvola' %}
+    {% if type_donnee == 'om' %}
     <div class="table-responsive">
         <table class="table table-sm table-striped">
             <thead>
-                <tr><th>TRANSID</th><th>Date</th><th>MSISDN</th><th>Nom</th><th>Montant</th><th>Type</th><th>Etat</th></tr>
+                <tr><th>TRANSID</th><th>Date</th><th>MSISDN</th><th>Montant</th><th>Service</th><th>Statut</th></tr>
             </thead>
             <tbody>
                 {% for t in page_obj %}
                 <tr>
-                    <td>{{ t.transid_mvola }}</td>
+                    <td>{{ t.transid_om }}</td>
                     <td>{{ t.date_trans }}</td>
                     <td>{{ t.msisdn }}</td>
-                    <td>{{ t.nom }}</td>
-                    <td>{{ t.amount }}</td>
-                    <td>{{ t.type_operation }}</td>
-                    <td>{{ t.state }}</td>
+                    <td>{{ t.montant }}</td>
+                    <td>{{ t.service }}</td>
+                    <td>{{ t.statut }}</td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="7" class="text-muted-debian">Aucune transaction.</td></tr>
+                <tr><td colspan="6" class="text-muted-debian">Aucune transaction.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
@@ -28,15 +27,16 @@
     <div class="table-responsive">
         <table class="table table-sm table-striped">
             <thead>
-                <tr><th>TRANSID</th><th>Date</th><th>rAutotransactionID</th><th>Heure</th><th>Statut CBS</th><th>Note</th></tr>
+                <tr><th>TRANSID</th><th>Date</th><th>rAutotransactionID</th><th>Heure</th><th>Montant</th><th>Statut CBS</th><th>Note</th></tr>
             </thead>
             <tbody>
                 {% for t in page_obj %}
                 <tr>
-                    <td>{{ t.transid_mvola }}</td>
+                    <td>{{ t.transid_om }}</td>
                     <td>{{ t.posting_date }}</td>
                     <td>{{ t.r_autotransaction_id }}</td>
                     <td>{{ t.time }}</td>
+                    <td>{% if t.montant is not None %}{{ t.montant }}{% else %}-{% endif %}</td>
                     <td>
                         {% if t.is_success %}
                         <span class="badge text-bg-success">Succes</span>
@@ -47,7 +47,7 @@
                     <td>{{ t.note|truncatechars:60 }}</td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="6" class="text-muted-debian">Aucune transaction.</td></tr>
+                <tr><td colspan="7" class="text-muted-debian">Aucune transaction.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
@@ -57,28 +57,28 @@
     <div class="table-responsive">
         <table class="table table-sm table-striped">
             <thead>
-                <tr><th>TRANSID</th><th>Statut</th><th>Action recommandee</th><th>MSISDN / Nom (MVOLA)</th><th>Montant (MVOLA)</th><th>rAutotransactionID (PAMF)</th></tr>
+                <tr><th>TRANSID</th><th>Statut</th><th>Action recommandee</th><th>MSISDN (OM)</th><th>Montant (OM)</th><th>rAutotransactionID (PAMF)</th></tr>
             </thead>
             <tbody>
                 {% for res in page_obj %}
                 <tr>
-                    <td>{{ res.transid_mvola }}</td>
+                    <td>{{ res.transid_om }}</td>
                     <td>
-                        <span class="badge {% if res.statut == 'ORPHELINE_MVOLA' %}text-bg-warning{% elif res.statut == 'DOUBLON_PAMF' %}text-bg-secondary{% else %}text-bg-info{% endif %}">
+                        <span class="badge {% if res.statut == 'ORPHELINE_OM' %}text-bg-warning{% elif res.statut == 'DOUBLON_PAMF' %}text-bg-secondary{% else %}text-bg-info{% endif %}">
                             {{ res.get_statut_display }}
                         </span>
                     </td>
                     <td>
                         {% if res.action_recommandee %}
-                        <span class="badge {% if res.action_recommandee == 'ROLLBACK_MVOLA' %}text-bg-danger{% elif res.action_recommandee == 'CHOISIR_POSTING' %}text-bg-secondary{% else %}text-bg-warning{% endif %}">
+                        <span class="badge {% if res.action_recommandee == 'ROLLBACK_OM' %}text-bg-danger{% elif res.action_recommandee == 'CHOISIR_POSTING' %}text-bg-secondary{% else %}text-bg-warning{% endif %}">
                             {{ res.action_recommandee.label }}
                         </span>
                         {% else %}
                         <span class="text-muted-debian">-</span>
                         {% endif %}
                     </td>
-                    <td>{% if res.transaction_mvola %}{{ res.transaction_mvola.msisdn }} - {{ res.transaction_mvola.nom }}{% else %}-{% endif %}</td>
-                    <td>{% if res.transaction_mvola %}{{ res.transaction_mvola.amount }}{% else %}-{% endif %}</td>
+                    <td>{% if res.transaction_om %}{{ res.transaction_om.msisdn }}{% else %}-{% endif %}</td>
+                    <td>{% if res.transaction_om %}{{ res.transaction_om.montant }}{% else %}-{% endif %}</td>
                     <td>{% if res.transaction_pamf %}{{ res.transaction_pamf.r_autotransaction_id }}{% else %}-{% endif %}</td>
                 </tr>
                 {% empty %}
@@ -95,14 +95,14 @@
         <div>
             {% if page_obj.has_previous %}
             <button type="button" class="btn btn-sm btn-outline-secondary"
-                    hx-get="{% url 'transactions:mvola_rapprochement_lignes' rapprochement.pk type_donnee %}?page={{ page_obj.previous_page_number }}"
+                    hx-get="{% url 'transactions:om_rapprochement_lignes' rapprochement.pk type_donnee %}?page={{ page_obj.previous_page_number }}"
                     hx-target="closest .lignes-container" hx-swap="outerHTML">
                 Precedent
             </button>
             {% endif %}
             {% if page_obj.has_next %}
             <button type="button" class="btn btn-sm btn-outline-secondary"
-                    hx-get="{% url 'transactions:mvola_rapprochement_lignes' rapprochement.pk type_donnee %}?page={{ page_obj.next_page_number }}"
+                    hx-get="{% url 'transactions:om_rapprochement_lignes' rapprochement.pk type_donnee %}?page={{ page_obj.next_page_number }}"
                     hx-target="closest .lignes-container" hx-swap="outerHTML">
                 Suivant
             </button>

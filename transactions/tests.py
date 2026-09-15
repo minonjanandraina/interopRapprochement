@@ -190,6 +190,23 @@ class ImporterTransactionsPamfTests(TestCase):
         self.assertIn('connexion refusee', import_obj.message_erreur)
         self.assertEqual(TransactionPamf.objects.count(), 0)
 
+    @patch('transactions.services_pamf.fetch_transactions_pamf')
+    def test_paiement_scinde_sur_plusieurs_postings_est_accepte(self, mock_fetch):
+        """cf. CLAUDE.md - decision du 2026-09-15 : un meme TRANSID_MVOLA (paiement marchand
+        scinde sur plusieurs prets) peut avoir plusieurs postings CBS (rAutotransactionID
+        distincts). Ne doit plus lever IntegrityError."""
+        mock_fetch.return_value = [
+            {'rAutotransactionID': 572435664, 'postingDate': date(2026, 9, 11), 'Time': '13:50:28',
+             'Note': 'pret 1', 'TRANSID_MVOLA': 'MP260911.1350.D49614', 'responseBody': '{}', 'is_sucess': 1},
+            {'rAutotransactionID': 572435666, 'postingDate': date(2026, 9, 11), 'Time': '13:50:28',
+             'Note': 'pret 2', 'TRANSID_MVOLA': 'MP260911.1350.D49614', 'responseBody': '{}', 'is_sucess': 1},
+        ]
+
+        import_obj = importer_transactions_pamf(date(2026, 9, 11), self.user)
+
+        self.assertEqual(import_obj.statut, ImportRequetePamf.Statut.SUCCES)
+        self.assertEqual(TransactionPamf.objects.filter(transid_mvola='MP260911.1350.D49614').count(), 2)
+
 
 class LancerRapprochementTests(TestCase):
     def setUp(self):
@@ -280,6 +297,28 @@ class LancerRapprochementTests(TestCase):
         self.assertFalse(Ecart.objects.filter(transid_mvola='111').exists())
         self.assertTrue(Ecart.objects.filter(transid_mvola='222').exists())
         self.assertTrue(Ecart.objects.filter(transid_mvola='999').exists())
+
+    @patch('transactions.services_pamf.fetch_transactions_pamf')
+    def test_plusieurs_postings_pamf_sont_classes_doublon_pamf(self, mock_fetch):
+        """cf. CLAUDE.md (decision du 2026-09-15) : un TRANSID_MVOLA avec plusieurs postings CBS
+        (paiement scinde) n'est plus resolu automatiquement - statut DOUBLON_PAMF, transaction_pamf
+        laisse a NULL, action recommandee CHOISIR_POSTING tant qu'aucun posting n'a ete choisi."""
+        fichier = make_csv('2026-09-07_reporting_PAMF.csv', [make_row(transid='SPLIT')])
+        importer_fichier_mvola(fichier, self.user)
+        mock_fetch.return_value = [
+            {'rAutotransactionID': 1, 'postingDate': self.date_cible, 'Time': '00:00:00',
+             'Note': 'pret 1', 'TRANSID_MVOLA': 'SPLIT', 'responseBody': '', 'is_sucess': 1},
+            {'rAutotransactionID': 2, 'postingDate': self.date_cible, 'Time': '00:00:00',
+             'Note': 'pret 2', 'TRANSID_MVOLA': 'SPLIT', 'responseBody': '', 'is_sucess': 1},
+        ]
+
+        rapprochement = lancer_rapprochement(self.date_cible, self.user)
+
+        self.assertEqual(rapprochement.nb_doublons_pamf, 1)
+        resultat = rapprochement.resultats.get(transid_mvola='SPLIT')
+        self.assertEqual(resultat.statut, ResultatRapprochement.Statut.DOUBLON_PAMF)
+        self.assertIsNone(resultat.transaction_pamf)
+        self.assertEqual(resultat.action_recommandee, ResultatRapprochement.ActionRecommandee.CHOISIR_POSTING)
 
     @patch('transactions.services_pamf.fetch_transactions_pamf')
     def test_absente_mvola_et_en_echec_pamf_est_exclue_du_resultat(self, mock_fetch):

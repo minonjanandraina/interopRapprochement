@@ -1,14 +1,14 @@
 {% extends "base.html" %}
 
-{% block title %}Rapprochement MVOLA - interopRapprochement{% endblock %}
+{% block title %}Rapprochement Orange Money - interopRapprochement{% endblock %}
 
 {% block content %}
-<h1 class="h4 mb-3">Rapprochement MVOLA</h1>
-{% include "transactions/_mvola_tabs.html" %}
+<h1 class="h4 mb-3">Rapprochement Orange Money</h1>
+{% include "transactions/_om_tabs.html" %}
 
 <div class="card p-4">
     <h2 class="h5 mb-4">Lancer un rapprochement</h2>
-    <form method="post" novalidate id="lancementForm" data-lancer-url="{% url 'transactions:mvola_rapprochement_lancer_date' %}">
+    <form method="post" novalidate id="lancementForm" data-lancer-url="{% url 'transactions:om_rapprochement_lancer_date' %}">
         {% csrf_token %}
         {% for error in form.non_field_errors %}
             <div class="text-danger small mb-2">{{ error }}</div>
@@ -44,10 +44,10 @@
                 <tr>
                     <th>Date</th>
                     <th>Statut</th>
-                    <th>MVOLA</th>
+                    <th>Orange Money</th>
                     <th>PAMF</th>
                     <th>Rapprochees</th>
-                    <th>Orph. MVOLA</th>
+                    <th>Orph. OM</th>
                     <th>Orph. PAMF</th>
                     <th>Doublons PAMF</th>
                     <th>Execute par</th>
@@ -68,10 +68,10 @@
                             <span class="badge text-bg-secondary">{{ r.get_statut_display }}</span>
                         {% endif %}
                     </td>
-                    <td>{{ r.nb_mvola }}</td>
+                    <td>{{ r.nb_om }}</td>
                     <td>{{ r.nb_pamf }}</td>
                     <td>{{ r.nb_success }}</td>
-                    <td>{{ r.nb_orphelines_mvola }}</td>
+                    <td>{{ r.nb_orphelines_om }}</td>
                     <td>{{ r.nb_orphelines_pamf }}</td>
                     <td>{{ r.nb_doublons_pamf }}</td>
                     <td>{{ r.lance_par }}</td>
@@ -79,7 +79,7 @@
                     <td>
                         <button type="button" class="btn btn-sm btn-outline-secondary"
                                 data-bs-toggle="modal" data-bs-target="#rapprochementModal"
-                                hx-get="{% url 'transactions:mvola_rapprochement_detail' r.pk %}"
+                                hx-get="{% url 'transactions:om_rapprochement_detail' r.pk %}"
                                 hx-target="#rapprochementModalContent">
                             Details
                         </button>

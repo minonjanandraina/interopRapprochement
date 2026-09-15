@@ -26,21 +26,30 @@ def importer_transactions_pamf(date_requete, user):
         import_obj.save(update_fields=['message_erreur'])
         return import_obj
 
+    # transid_mvola n'est pas unique (cf. TransactionPamf) : un paiement marchand peut etre
+    # scinde cote CBS sur plusieurs prets (plusieurs postings/rAutotransactionID pour un meme
+    # RequestID). La cle de dedoublonnage est donc la paire (transid_mvola, rAutotransactionID),
+    # pas transid_mvola seul.
     transids = [str(ligne['TRANSID_MVOLA']) for ligne in lignes]
     deja_existants = set(
-        TransactionPamf.objects.filter(transid_mvola__in=transids).values_list('transid_mvola', flat=True)
+        TransactionPamf.objects.filter(transid_mvola__in=transids)
+        .values_list('transid_mvola', 'r_autotransaction_id')
     )
 
     a_inserer = []
+    vus_dans_le_lot = set()
     for ligne in lignes:
         transid = str(ligne['TRANSID_MVOLA'])
-        if transid in deja_existants:
+        r_autotransaction_id = str(ligne['rAutotransactionID']) if ligne['rAutotransactionID'] is not None else ''
+        cle = (transid, r_autotransaction_id)
+        if cle in deja_existants or cle in vus_dans_le_lot:
             continue
+        vus_dans_le_lot.add(cle)
         # rAutotransactionID/Time sont NULL quand la ligne apiLog n'a pas (encore) de
         # correspondance dans mcTransaction (cf. CLAUDE.md - left join) : la requete a atteint
         # le CBS (trace apiLog) mais n'a pas ete traitee -> is_sucess=0, ticket Aspekt recommande.
         a_inserer.append(TransactionPamf(
-            r_autotransaction_id=str(ligne['rAutotransactionID']) if ligne['rAutotransactionID'] is not None else '',
+            r_autotransaction_id=r_autotransaction_id,
             posting_date=ligne['postingDate'],
             time=str(ligne['Time']) if ligne.get('Time') is not None else '',
             note=ligne.get('Note') or '',

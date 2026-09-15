@@ -6,6 +6,7 @@ l'utilisateur, seule leur repartition entre roles est dynamique.
 """
 
 IMPORTER_CSV_MVOLA = 'importer_csv_mvola'
+IMPORTER_FICHIER_OM = 'importer_fichier_om'
 LANCER_RAPPROCHEMENT = 'lancer_rapprochement'
 TRAITER_ECARTS = 'traiter_ecarts'
 GERER_ROLES = 'gerer_roles'
@@ -14,6 +15,7 @@ VUE_ONLY = 'vue_only'
 
 PRIVILEGE_CHOICES = [
     (IMPORTER_CSV_MVOLA, 'Importer un fichier CSV MVOLA'),
+    (IMPORTER_FICHIER_OM, 'Importer un fichier Orange Money'),
     (LANCER_RAPPROCHEMENT, 'Lancer un rapprochement'),
     (TRAITER_ECARTS, 'Traiter les ecarts (statut, commentaire, piece jointe, rollback, ticket Aspekt)'),
     (GERER_ROLES, 'Gerer les roles et privileges'),
