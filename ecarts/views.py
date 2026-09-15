@@ -45,8 +45,10 @@ COLONNES_ECARTS = [
 def _filtrer_ecarts(request):
     form = FiltreEcartForm(request.GET or None)
     queryset = Ecart.objects.select_related('resultat__transaction_mvola', 'resultat__transaction_pamf')
+    filtre_applique = False
     if form.is_valid():
         data = form.cleaned_data
+        filtre_applique = any(data.values())
         if data['date_min']:
             queryset = queryset.filter(date_transaction__gte=data['date_min'])
         if data['date_max']:
@@ -73,12 +75,12 @@ def _filtrer_ecarts(request):
                     queryset = queryset.filter(resultat__transaction_pamf__isnull=False)
                 else:
                     queryset = queryset.filter(resultat__transaction_pamf__isnull=True)
-    return queryset, form
+    return queryset, form, filtre_applique
 
 
 @login_required
 def mvola_liste(request):
-    queryset, form = _filtrer_ecarts(request)
+    queryset, form, filtre_applique = _filtrer_ecarts(request)
     page_obj, querystring = paginate(request, queryset)
     export_excel_url, export_pdf_url = reports.urls_export(request, 'ecarts:mvola_liste_export')
     meta = reports.build_meta(
@@ -93,6 +95,7 @@ def mvola_liste(request):
     context = {
         'form': form, 'page_obj': page_obj, 'querystring': querystring, 'meta': meta,
         'bulk_form': BulkActionForm(), 'statut_choices': Ecart.Statut.choices,
+        'filtre_applique': filtre_applique,
     }
 
     if is_htmx_request(request):
@@ -104,7 +107,7 @@ def mvola_liste(request):
 
 @login_required
 def mvola_liste_export(request, format):
-    queryset, form = _filtrer_ecarts(request)
+    queryset, form, _filtre_applique = _filtrer_ecarts(request)
     meta = reports.build_meta(
         request,
         titre='Ecarts MVOLA / PAMF',
@@ -279,8 +282,10 @@ COLONNES_ECARTS_OM = [
 def _filtrer_ecarts_om(request):
     form = FiltreEcartOMForm(request.GET or None)
     queryset = EcartOM.objects.select_related('resultat__transaction_om', 'resultat__transaction_pamf')
+    filtre_applique = False
     if form.is_valid():
         data = form.cleaned_data
+        filtre_applique = any(data.values())
         if data['date_min']:
             queryset = queryset.filter(date_transaction__gte=data['date_min'])
         if data['date_max']:
@@ -304,12 +309,12 @@ def _filtrer_ecarts_om(request):
                     queryset = queryset.filter(resultat__transaction_pamf__isnull=False)
                 else:
                     queryset = queryset.filter(resultat__transaction_pamf__isnull=True)
-    return queryset, form
+    return queryset, form, filtre_applique
 
 
 @login_required
 def om_liste(request):
-    queryset, form = _filtrer_ecarts_om(request)
+    queryset, form, filtre_applique = _filtrer_ecarts_om(request)
     page_obj, querystring = paginate(request, queryset)
     export_excel_url, export_pdf_url = reports.urls_export(request, 'ecarts:om_liste_export')
     meta = reports.build_meta(
@@ -324,6 +329,7 @@ def om_liste(request):
     context = {
         'form': form, 'page_obj': page_obj, 'querystring': querystring, 'meta': meta,
         'bulk_form': BulkActionForm(), 'statut_choices': EcartOM.Statut.choices,
+        'filtre_applique': filtre_applique,
     }
 
     if is_htmx_request(request):
@@ -335,7 +341,7 @@ def om_liste(request):
 
 @login_required
 def om_liste_export(request, format):
-    queryset, form = _filtrer_ecarts_om(request)
+    queryset, form, _filtre_applique = _filtrer_ecarts_om(request)
     meta = reports.build_meta(
         request,
         titre='Ecarts Orange Money / PAMF',

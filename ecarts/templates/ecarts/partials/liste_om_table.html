@@ -1,4 +1,5 @@
 {% include "core/_rapport_entete.html" %}
+{% if filtre_applique %}
 <form method="post" action="{% url 'ecarts:om_bulk_action' %}" id="bulk-form-om">
     {% csrf_token %}
     <input type="hidden" name="_querystring" value="{{ querystring }}">
@@ -27,53 +28,63 @@
             <button type="submit" class="btn btn-debian btn-sm">Appliquer aux ecarts coches</button>
         </div>
     </div>
+{% else %}
+<div class="alert alert-secondary small mb-2">
+    Appliquez au moins un filtre ci-dessus (date, TRANSID, type, statut...) pour activer la selection
+    multiple et les actions en masse - pour eviter d'agir en masse sur l'ensemble des ecarts par
+    inadvertance.
+</div>
+{% endif %}
 
-    <div class="table-responsive">
-        <table class="table table-sm table-striped">
-            <thead>
-                <tr>
-                    <th><input type="checkbox" class="ecarts-select-all" aria-label="Tout selectionner"></th>
-                    <th>TRANSID</th><th>Date</th><th>Type</th><th>Montant</th><th>Action recommandee</th><th>Statut</th><th>Detecte le</th><th></th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for e in page_obj %}
-                <tr>
-                    <td><input type="checkbox" name="ecart_ids" value="{{ e.pk }}" class="ecart-checkbox"></td>
-                    <td>{{ e.transid_om }}</td>
-                    <td>{{ e.date_transaction }}</td>
-                    <td>
-                        <span class="badge {% if e.type_ecart == 'ORPHELINE_OM' %}text-bg-warning{% elif e.type_ecart == 'DOUBLON_PAMF' %}text-bg-secondary{% else %}text-bg-info{% endif %}">
-                            {{ e.get_type_ecart_display }}
-                        </span>
-                    </td>
-                    <td>{% if e.montant is not None %}{{ e.montant }}{% else %}<span class="text-muted-debian">-</span>{% endif %}</td>
-                    <td>
-                        {% if e.action_recommandee %}
-                        <span class="badge {% if e.action_recommandee == 'ROLLBACK_OM' %}text-bg-danger{% elif e.action_recommandee == 'CHOISIR_POSTING' %}text-bg-secondary{% else %}text-bg-warning{% endif %}">
-                            {{ e.action_recommandee.label }}
-                        </span>
-                        {% else %}
-                        <span class="text-muted-debian">-</span>
-                        {% endif %}
-                    </td>
-                    <td>
-                        <span class="badge {% if e.statut == 'REGULARISE' %}text-bg-success{% elif e.statut == 'EN_COURS' %}text-bg-secondary{% else %}text-bg-danger{% endif %}">
-                            {{ e.get_statut_display }}
-                        </span>
-                    </td>
-                    <td>{{ e.detecte_le }}</td>
-                    <td><a href="{% url 'ecarts:om_detail' e.pk %}" class="btn btn-sm btn-outline-secondary">Details</a></td>
-                </tr>
-                {% empty %}
-                <tr><td colspan="9" class="text-muted-debian">Aucun ecart.</td></tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
+<div class="table-responsive">
+    <table class="table table-sm table-striped">
+        <thead>
+            <tr>
+                {% if filtre_applique %}<th><input type="checkbox" class="ecarts-select-all" aria-label="Tout selectionner"></th>{% endif %}
+                <th>TRANSID</th><th>Date</th><th>Type</th><th>Montant</th><th>Action recommandee</th><th>Statut</th><th>Detecte le</th><th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for e in page_obj %}
+            <tr>
+                {% if filtre_applique %}<td><input type="checkbox" name="ecart_ids" value="{{ e.pk }}" class="ecart-checkbox"></td>{% endif %}
+                <td>{{ e.transid_om }}</td>
+                <td>{{ e.date_transaction }}</td>
+                <td>
+                    <span class="badge {% if e.type_ecart == 'ORPHELINE_OM' %}text-bg-warning{% elif e.type_ecart == 'DOUBLON_PAMF' %}text-bg-secondary{% else %}text-bg-info{% endif %}">
+                        {{ e.get_type_ecart_display }}
+                    </span>
+                </td>
+                <td>{% if e.montant is not None %}{{ e.montant }}{% else %}<span class="text-muted-debian">-</span>{% endif %}</td>
+                <td>
+                    {% if e.action_recommandee %}
+                    <span class="badge {% if e.action_recommandee == 'ROLLBACK_OM' %}text-bg-danger{% elif e.action_recommandee == 'CHOISIR_POSTING' %}text-bg-secondary{% else %}text-bg-warning{% endif %}">
+                        {{ e.action_recommandee.label }}
+                    </span>
+                    {% else %}
+                    <span class="text-muted-debian">-</span>
+                    {% endif %}
+                </td>
+                <td>
+                    <span class="badge {% if e.statut == 'REGULARISE' %}text-bg-success{% elif e.statut == 'EN_COURS' %}text-bg-secondary{% else %}text-bg-danger{% endif %}">
+                        {{ e.get_statut_display }}
+                    </span>
+                </td>
+                <td>{{ e.detecte_le }}</td>
+                <td><a href="{% url 'ecarts:om_detail' e.pk %}" class="btn btn-sm btn-outline-secondary">Details</a></td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="{% if filtre_applique %}9{% else %}8{% endif %}" class="text-muted-debian">Aucun ecart.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% if filtre_applique %}
 </form>
+{% endif %}
 {% include "_pagination.html" %}
 
+{% if filtre_applique %}
 <script>
 (function() {
     var form = document.getElementById('bulk-form-om');
@@ -105,3 +116,4 @@
     });
 })();
 </script>
+{% endif %}
