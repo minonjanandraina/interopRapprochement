@@ -22,7 +22,10 @@ DEBUG = env('DEBUG')
 
 ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['localhost', '127.0.0.1'])
 
-
+CSRF_TRUSTED_ORIGINS = [
+    'https://portal.pamf.mg',
+    'http://192.168.123.97:1089',
+]
 # Application definition
 
 INSTALLED_APPS = [
