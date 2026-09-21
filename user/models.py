@@ -1,6 +1,7 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 
+from .privileges import CONSULTER_RAPPROCHEMENT as PRIVILEGE_CONSULTER_RAPPROCHEMENT
 from .privileges import GERER_ROLES as PRIVILEGE_GERER_ROLES
 from .privileges import GERER_UTILISATEURS as PRIVILEGE_GERER_UTILISATEURS
 from .privileges import IMPORTER_CSV_MVOLA as PRIVILEGE_IMPORTER_CSV_MVOLA
@@ -64,6 +65,10 @@ class User(AbstractUser):
     @property
     def peut_lancer_rapprochement(self):
         return self.has_privilege(PRIVILEGE_LANCER_RAPPROCHEMENT)
+
+    @property
+    def peut_consulter_rapprochement(self):
+        return self.has_privilege(PRIVILEGE_CONSULTER_RAPPROCHEMENT)
 
     @property
     def peut_gerer_roles(self):

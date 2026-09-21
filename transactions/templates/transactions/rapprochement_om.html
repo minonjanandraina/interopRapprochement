@@ -8,6 +8,7 @@
 
 <div class="card p-4">
     <h2 class="h5 mb-4">Lancer un rapprochement</h2>
+    {% if can_launch_reconciliation %}
     <form method="post" novalidate id="lancementForm" data-lancer-url="{% url 'transactions:om_rapprochement_lancer_date' %}">
         {% csrf_token %}
         {% for error in form.non_field_errors %}
@@ -33,6 +34,9 @@
             </div>
         </div>
     </form>
+    {% else %}
+    <p class="text-muted-debian small mb-0">Vous n'avez pas la permission de lancer un rapprochement.</p>
+    {% endif %}
 </div>
 
 <div class="card p-4 mt-4">
@@ -77,12 +81,14 @@
                     <td>{{ r.lance_par }}</td>
                     <td>{{ r.execute_le }}</td>
                     <td>
+                        {% if can_launch_reconciliation %}
                         <button type="button" class="btn btn-sm btn-outline-secondary"
                                 data-bs-toggle="modal" data-bs-target="#rapprochementModal"
                                 hx-get="{% url 'transactions:om_rapprochement_detail' r.pk %}"
                                 hx-target="#rapprochementModalContent">
                             Details
                         </button>
+                        {% endif %}
                     </td>
                 </tr>
                 {% endfor %}

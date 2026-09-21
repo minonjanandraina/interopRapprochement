@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -231,9 +232,11 @@ def _lancer_rapprochement_date(date_cible, user):
     )
 
 
-@privilege_required(privileges.LANCER_RAPPROCHEMENT)
+@privilege_required([privileges.LANCER_RAPPROCHEMENT, privileges.CONSULTER_RAPPROCHEMENT])
 def mvola_rapprochement(request):
     if request.method == 'POST':
+        if not request.user.has_privilege(privileges.LANCER_RAPPROCHEMENT):
+            raise PermissionDenied("Vous n'avez pas le privilege necessaire pour lancer un rapprochement.")
         form = RapprochementForm(request.POST)
         if form.is_valid():
             # Fallback sans JS : la plage est traitee sequentiellement dans la requete (pas de
@@ -246,8 +249,10 @@ def mvola_rapprochement(request):
         form = RapprochementForm()
 
     historique = Rapprochement.objects.all()[:30]
+    can_launch_reconciliation = request.user.has_privilege(privileges.LANCER_RAPPROCHEMENT)
     return render(request, 'transactions/rapprochement_mvola.html', {
         'form': form, 'historique': historique, 'active_tab': 'rapprochement', 'active_service': 'mvola',
+        'can_launch_reconciliation': can_launch_reconciliation,
     })
 
 
@@ -485,9 +490,11 @@ def _lancer_rapprochement_date_om(date_cible, user):
     )
 
 
-@privilege_required(privileges.LANCER_RAPPROCHEMENT)
+@privilege_required([privileges.LANCER_RAPPROCHEMENT, privileges.CONSULTER_RAPPROCHEMENT])
 def om_rapprochement(request):
     if request.method == 'POST':
+        if not request.user.has_privilege(privileges.LANCER_RAPPROCHEMENT):
+            raise PermissionDenied("Vous n'avez pas le privilege necessaire pour lancer un rapprochement.")
         form = RapprochementForm(request.POST)
         if form.is_valid():
             for date_cible in _dates_de_la_plage(form.cleaned_data['date_from'], form.cleaned_data['date_to']):
@@ -498,8 +505,10 @@ def om_rapprochement(request):
         form = RapprochementForm()
 
     historique = RapprochementOM.objects.all()[:30]
+    can_launch_reconciliation = request.user.has_privilege(privileges.LANCER_RAPPROCHEMENT)
     return render(request, 'transactions/rapprochement_om.html', {
         'form': form, 'historique': historique, 'active_tab': 'rapprochement', 'active_service': 'om',
+        'can_launch_reconciliation': can_launch_reconciliation,
     })
 
 
