@@ -6,10 +6,10 @@
         </a>
     </li>
     {% endif %}
-    {% if user.peut_lancer_rapprochement %}
+    {% if user.peut_lancer_rapprochement or user.peut_consulter_rapprochement %}
     <li class="nav-item">
         <a class="nav-link {% if active_tab == 'rapprochement' %}active{% endif %}" href="{% url 'transactions:om_rapprochement' %}">
-            Lancement rapprochement
+            Rapprochement
         </a>
     </li>
     {% endif %}
