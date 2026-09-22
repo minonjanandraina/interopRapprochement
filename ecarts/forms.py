@@ -21,6 +21,8 @@ class FiltreEcartForm(forms.Form):
         choices=[('', 'Toutes')] + ResultatRapprochement.ActionRecommandee.choices,
         widget=forms.Select(attrs={'class': 'form-select form-select-sm'}),
     )
+    dernier_commentaire = forms.CharField(required=False, label='Dernier commentaire',
+                                           widget=forms.TextInput(attrs={'class': 'form-control form-control-sm'}))
 
 
 class FiltreEcartOMForm(forms.Form):
@@ -39,6 +41,8 @@ class FiltreEcartOMForm(forms.Form):
         choices=[('', 'Toutes')] + ResultatRapprochementOM.ActionRecommandee.choices,
         widget=forms.Select(attrs={'class': 'form-select form-select-sm'}),
     )
+    dernier_commentaire = forms.CharField(required=False, label='Dernier commentaire',
+                                           widget=forms.TextInput(attrs={'class': 'form-control form-control-sm'}))
 
 
 class CommentaireForm(forms.Form):

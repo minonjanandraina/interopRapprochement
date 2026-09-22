@@ -1,5 +1,6 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.db.models import Exists, OuterRef, Q, Subquery
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 
@@ -20,7 +21,7 @@ from .forms import (
     RollbackConfirmeForm,
     TicketAspektForm,
 )
-from .models import Ecart, EcartOM
+from .models import Ecart, EcartHistorique, EcartOM, EcartHistoriqueOM
 from .services import (
     ajouter_commentaire,
     ajouter_piece_jointe,
@@ -78,6 +79,15 @@ def _filtrer_ecarts(request):
                     queryset = queryset.filter(resultat__transaction_pamf__isnull=False)
                 else:
                     queryset = queryset.filter(resultat__transaction_pamf__isnull=True)
+        if data['dernier_commentaire']:
+            # Filtre sur le dernier commentaire : cherche un EcartHistorique de type COMMENTAIRE
+            # dont le commentaire contient le texte cherche, et qui est le plus recent pour cet ecart
+            subquery = EcartHistorique.objects.filter(
+                ecart_id=OuterRef('pk'),
+                action=EcartHistorique.Action.COMMENTAIRE,
+                commentaire__icontains=data['dernier_commentaire'],
+            ).order_by('-horodatage')
+            queryset = queryset.filter(Exists(subquery[:1]))
     return queryset, form, filtre_applique
 
 
@@ -314,6 +324,15 @@ def _filtrer_ecarts_om(request):
                     queryset = queryset.filter(resultat__transaction_pamf__isnull=False)
                 else:
                     queryset = queryset.filter(resultat__transaction_pamf__isnull=True)
+        if data['dernier_commentaire']:
+            # Filtre sur le dernier commentaire : cherche un EcartHistoriqueOM de type COMMENTAIRE
+            # dont le commentaire contient le texte cherche
+            subquery = EcartHistoriqueOM.objects.filter(
+                ecart_id=OuterRef('pk'),
+                action=EcartHistoriqueOM.Action.COMMENTAIRE,
+                commentaire__icontains=data['dernier_commentaire'],
+            ).order_by('-horodatage')
+            queryset = queryset.filter(Exists(subquery[:1]))
     return queryset, form, filtre_applique
 
 
