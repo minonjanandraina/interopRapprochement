@@ -45,16 +45,16 @@ with MouvementsCompte as (
   from cbs.dbo.loLoanCredit
   where postingDate = ?
 )
-select
+select distinct
   mc.rAutotransactionID,
   isnull(mc.postingDate, cast(al.RequestDateCreated as date)) as postingDate,
   mc.Time,
   mc.Note,
   al.RequestID as TRANSID_MVOLA,
   al.responseBody,
-  al.apiServiceId as apiservice,
-  al.RequestURL as path,
-  al.requestBody as body,
+  max(al.apiServiceId) as apiservice,
+  max(al.RequestURL) as path,
+  max(al.requestBody) as body,
   case when mc.Status = 3 or mvt.rAutoTransactionID is not null then 1 else 0 end as is_sucess
 from bagsPAMF_CBS_MC.dbo.apiLog al
 left join cbs.dbo.mcTransaction mc on mc.requestID = al.apiLogID and mc.rMerchantID = 13
@@ -62,6 +62,7 @@ left join MouvementsCompte mvt on mvt.rAutoTransactionID = mc.rAutotransactionID
 where (al.rMerchantID = 13 or mc.rMerchantID = 13)
   and (al.apiServiceId in (302, 303, 700) or al.RequestURL like '%/loanRepaymentByAlias/%')
   and cast(al.RequestDateCreated as date) = ?
+group by mc.rAutotransactionID, mc.postingDate, mc.Time, mc.Note, al.RequestID, al.responseBody, mc.Status, mvt.rAutoTransactionID
 """
 
 # apiServiceId = 303 (repaymentByAlias, remboursement sans montant precise) : le CBS scinde
@@ -109,8 +110,8 @@ select
   al.RequestID as TRANSID_ORANGE_MONEY,
   min(al.responseBody) as responseBody,
   al.apiServiceId as apiservice,
-  min(al.RequestURL) as path,
-  min(al.requestBody) as body,
+  max(al.RequestURL) as path,
+  max(al.requestBody) as body,
   sum(mc.AmountCRY) as Amount,
   case when min(case when mc.Status = 3 or mvt.rAutoTransactionID is not null then 1 else 0 end) = 1
     then 1 else 0 end as is_sucess
