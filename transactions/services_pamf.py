@@ -55,6 +55,9 @@ def importer_transactions_pamf(date_requete, user):
             note=ligne.get('Note') or '',
             transid_mvola=transid,
             response_body=ligne.get('responseBody') or '',
+            apiservice=ligne.get('apiservice'),
+            path=ligne.get('path') or '',
+            body=ligne.get('body') or '',
             is_success=bool(ligne.get('is_sucess', 1)),
             import_requete=import_obj,
         ))

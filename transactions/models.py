@@ -97,6 +97,9 @@ class TransactionPamf(models.Model):
     note = models.TextField(blank=True)
     transid_mvola = models.CharField('TRANSID_MVOLA', max_length=50, db_index=True)
     response_body = models.TextField(blank=True)
+    apiservice = models.IntegerField(null=True, blank=True, help_text="apiServiceId from apiLog")
+    path = models.TextField(blank=True, help_text="RequestURL from apiLog")
+    body = models.TextField(blank=True, help_text="requestBody from apiLog")
     is_success = models.BooleanField(
         'is_sucess', default=True,
         help_text="Status CBS = 3 (poste/valide). False = transaction presente mais en echec cote PAMF.",
@@ -322,6 +325,9 @@ class TransactionPamfOM(models.Model):
     note = models.TextField(blank=True)
     transid_om = models.CharField('TRANSID_ORANGE_MONEY', max_length=50, db_index=True)
     response_body = models.TextField(blank=True)
+    apiservice = models.IntegerField(null=True, blank=True, help_text="apiServiceId from apiLog")
+    path = models.TextField(blank=True, help_text="RequestURL from apiLog")
+    body = models.TextField(blank=True, help_text="requestBody from apiLog")
     montant = models.DecimalField(
         max_digits=18, decimal_places=2, null=True, blank=True,
         help_text="Montant CBS (AmountCRY), somme des postings pour un remboursement scinde (apiServiceId=303).",

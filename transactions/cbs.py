@@ -52,6 +52,9 @@ select
   mc.Note,
   al.RequestID as TRANSID_MVOLA,
   al.responseBody,
+  al.apiServiceId as apiservice,
+  al.RequestURL as path,
+  al.requestBody as body,
   case when mc.Status = 3 or mvt.rAutoTransactionID is not null then 1 else 0 end as is_sucess
 from bagsPAMF_CBS_MC.dbo.apiLog al
 left join cbs.dbo.mcTransaction mc on mc.requestID = al.apiLogID and mc.rMerchantID = 13
@@ -105,7 +108,9 @@ select
   ), 1, 2, '') as Note,
   al.RequestID as TRANSID_ORANGE_MONEY,
   min(al.responseBody) as responseBody,
-  al.apiServiceId,
+  al.apiServiceId as apiservice,
+  min(al.RequestURL) as path,
+  min(al.requestBody) as body,
   sum(mc.AmountCRY) as Amount,
   case when min(case when mc.Status = 3 or mvt.rAutoTransactionID is not null then 1 else 0 end) = 1
     then 1 else 0 end as is_sucess
@@ -126,7 +131,9 @@ select
   mc.Note,
   al.RequestID as TRANSID_ORANGE_MONEY,
   al.responseBody,
-  al.apiServiceId,
+  al.apiServiceId as apiservice,
+  al.RequestURL as path,
+  al.requestBody as body,
   mc.AmountCRY as Amount,
   case when mc.Status = 3 or mvt.rAutoTransactionID is not null then 1 else 0 end as is_sucess
 from bagsPAMF_CBS_MC.dbo.apiLog al
