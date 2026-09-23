@@ -15,6 +15,7 @@ class Ecart(models.Model):
         ORPHELINE_MVOLA = 'ORPHELINE_MVOLA', 'Orpheline MVOLA'
         ORPHELINE_PAMF = 'ORPHELINE_PAMF', 'Orpheline PAMF'
         DOUBLON_PAMF = 'DOUBLON_PAMF', 'Doublon PAMF (postings multiples)'
+        TRANSACTION_REJOUEE = 'TRANSACTION_REJOUEE', 'Transaction rejouee'
 
     class Statut(models.TextChoices):
         DETECTE = 'DETECTE', 'Detecte'
@@ -96,6 +97,7 @@ class EcartOM(models.Model):
         ORPHELINE_OM = 'ORPHELINE_OM', 'Orpheline Orange Money'
         ORPHELINE_PAMF = 'ORPHELINE_PAMF', 'Orpheline PAMF'
         DOUBLON_PAMF = 'DOUBLON_PAMF', 'Doublon PAMF (postings multiples)'
+        TRANSACTION_REJOUEE = 'TRANSACTION_REJOUEE', 'Transaction rejouee'
 
     class Statut(models.TextChoices):
         DETECTE = 'DETECTE', 'Detecte'

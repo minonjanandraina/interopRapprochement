@@ -370,7 +370,7 @@ class LancerRapprochementOMTests(TestCase):
     @patch('transactions.services_pamf_om.fetch_transactions_pamf_om')
     def test_detecete_transaction_rejouee_comme_orpheline_pamf_anterieure(self, mock_fetch):
         """Une orpheline PAMF qui correspond a une orpheline OM d'une date anterieure est
-        marquee comme TRANSACTION_REJOUEE, et le compteur est incremente."""
+        marquee comme TRANSACTION_REJOUEE avec statut REGULARISE, et le compteur est incremente."""
         from ecarts.models import EcartOM
 
         # Premier rapprochement : orpheline OM le 07/09
@@ -403,8 +403,10 @@ class LancerRapprochementOMTests(TestCase):
         resultat_2 = rapprochement_2.resultats.get(transid_om='REJOUEE')
         self.assertEqual(resultat_2.statut, ResultatRapprochementOM.Statut.TRANSACTION_REJOUEE)
 
-        # Un ecart est genere pour la transaction rejouee
-        self.assertTrue(EcartOM.objects.filter(transid_om='REJOUEE', date_transaction=date_cible_2).exists())
+        # Un ecart est genere pour la transaction rejouee avec le statut REGULARISE
+        ecart = EcartOM.objects.get(transid_om='REJOUEE', date_transaction=date_cible_2)
+        self.assertEqual(ecart.type_ecart, EcartOM.TypeEcart.TRANSACTION_REJOUEE)
+        self.assertEqual(ecart.statut, EcartOM.Statut.REGULARISE)
 
 
 class NotificationNouveauxEcartsOMTests(TestCase):

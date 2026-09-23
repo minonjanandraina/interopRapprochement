@@ -68,15 +68,17 @@ def _generer_ecarts_om(rapprochement):
     from ecarts.models import EcartOM
 
     orphelines = rapprochement.resultats.exclude(statut=ResultatRapprochementOM.Statut.SUCCESS)
-    a_creer = [
-        EcartOM(
+    a_creer = []
+    for resultat in orphelines:
+        # Les transactions rejouees sont marquees comme REGULARISE automatiquement
+        statut_ecart = EcartOM.Statut.REGULARISE if resultat.statut == ResultatRapprochementOM.Statut.TRANSACTION_REJOUEE else EcartOM.Statut.DETECTE
+        a_creer.append(EcartOM(
             resultat=resultat,
             transid_om=resultat.transid_om,
             type_ecart=resultat.statut,
             date_transaction=rapprochement.date,
-        )
-        for resultat in orphelines
-    ]
+            statut=statut_ecart,
+        ))
     EcartOM.objects.bulk_create(a_creer, batch_size=200)
     return a_creer
 

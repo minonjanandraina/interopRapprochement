@@ -410,7 +410,7 @@ class LancerRapprochementTests(TestCase):
     @patch('transactions.services_pamf.fetch_transactions_pamf')
     def test_detecete_transaction_rejouee_comme_orpheline_pamf_anterieure(self, mock_fetch):
         """Une orpheline PAMF qui correspond a une orpheline MVOLA d'une date anterieure est
-        marquee comme TRANSACTION_REJOUEE, et le compteur est incremente."""
+        marquee comme TRANSACTION_REJOUEE avec statut REGULARISE, et le compteur est incremente."""
         from ecarts.models import Ecart
 
         # Premier rapprochement : orpheline MVOLA le 07/09
@@ -442,8 +442,10 @@ class LancerRapprochementTests(TestCase):
         resultat_2 = rapprochement_2.resultats.get(transid_mvola='REJOUEE')
         self.assertEqual(resultat_2.statut, ResultatRapprochement.Statut.TRANSACTION_REJOUEE)
 
-        # Un ecart est genere pour la transaction rejouee
-        self.assertTrue(Ecart.objects.filter(transid_mvola='REJOUEE', date_transaction=date_cible_2).exists())
+        # Un ecart est genere pour la transaction rejouee avec le statut REGULARISE
+        ecart = Ecart.objects.get(transid_mvola='REJOUEE', date_transaction=date_cible_2)
+        self.assertEqual(ecart.type_ecart, Ecart.TypeEcart.TRANSACTION_REJOUEE)
+        self.assertEqual(ecart.statut, Ecart.Statut.REGULARISE)
 
     @patch('transactions.services_pamf.fetch_transactions_pamf')
     def test_echec_cbs_marque_le_rapprochement_en_echec(self, mock_fetch):
