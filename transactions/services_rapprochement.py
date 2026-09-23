@@ -11,6 +11,7 @@ recalculer a neuf. C'est un choix assume (cf. Decisions prises) - le travail de 
 deja effectue sur une date n'est PAS conserve d'une relance a l'autre.
 """
 
+import logging
 from collections import defaultdict
 from datetime import datetime, time
 
@@ -26,6 +27,8 @@ from .models import (
     TransactionPamf,
 )
 from .services_pamf import importer_transactions_pamf
+
+logger = logging.getLogger(__name__)
 
 
 class CsvMvolaNonImporte(Exception):
@@ -153,6 +156,22 @@ def lancer_rapprochement(date_cible, user):
     for t in TransactionPamf.objects.filter(posting_date=date_cible):
         pamf_groupes[t.transid_mvola].append(t)
     tous_ids = set(mvola_par_id) | set(pamf_groupes)
+
+    # Logging diagnostique pour déboguer les écarts 100% PAMF
+    logger.info(f"=== Rapprochement {date_cible} ===")
+    logger.info(f"MVOLA: {len(mvola_par_id)} transactions, transids: {sorted(mvola_par_id.keys())[:10]}...")
+    logger.info(f"PAMF: {len(pamf_groupes)} transactions distinctes, transids: {sorted(pamf_groupes.keys())[:10]}...")
+
+    # Vérifier s'il y a des transids PAMF NULL ou vides
+    null_transids = TransactionPamf.objects.filter(posting_date=date_cible, transid_mvola__in=['', None])
+    if null_transids.exists():
+        logger.warning(f"⚠️ {null_transids.count()} lignes PAMF avec transid_mvola vide/NULL!")
+
+    # Vérifier les correspondances
+    correspondances = set(mvola_par_id.keys()) & set(pamf_groupes.keys())
+    logger.info(f"Correspondances trouvées: {len(correspondances)}")
+    if correspondances:
+        logger.info(f"Premiers transids correspondants: {sorted(correspondances)[:5]}")
 
     # Detecter les orphelines PAMF qui correspondent a une orpheline MVOLA d'une date anterieure
     orphelines_pamf_ids = {transid for transid in tous_ids if not mvola_par_id.get(transid)}
