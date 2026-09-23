@@ -138,12 +138,44 @@
                             {% endif %}
                         </td>
                     </tr>
+                    {% if transaction_pamf.apiservice %}
+                    <tr><th>API Service</th><td>{{ transaction_pamf.apiservice }}</td></tr>
+                    {% endif %}
+                    {% if transaction_pamf.path %}
+                    <tr><th>Path</th><td><code class="small">{{ transaction_pamf.path }}</code></td></tr>
+                    {% endif %}
                 </tbody>
             </table>
-            <details>
-                <summary class="small text-muted-debian" style="cursor: pointer;">responseBody (brut)</summary>
-                <pre class="small border rounded p-2 mt-2" style="white-space: pre-wrap;">{{ transaction_pamf.response_body }}</pre>
-            </details>
+            <div class="accordion accordion-flush" id="apiDetails">
+                <div class="accordion-item">
+                    <h6 class="accordion-header">
+                        <button class="accordion-button collapsed small text-muted-debian" type="button" data-bs-toggle="collapse" data-bs-target="#requestBody">
+                            requestBody (brut)
+                        </button>
+                    </h6>
+                    <div id="requestBody" class="accordion-collapse collapse" data-bs-parent="#apiDetails">
+                        <div class="accordion-body p-2">
+                            {% if transaction_pamf.body %}
+                            <pre class="small border rounded p-2" style="white-space: pre-wrap; max-height: 300px; overflow-y: auto;">{{ transaction_pamf.body }}</pre>
+                            {% else %}
+                            <p class="text-muted-debian small mb-0">Non disponible</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                <div class="accordion-item">
+                    <h6 class="accordion-header">
+                        <button class="accordion-button collapsed small text-muted-debian" type="button" data-bs-toggle="collapse" data-bs-target="#responseBody">
+                            responseBody (brut)
+                        </button>
+                    </h6>
+                    <div id="responseBody" class="accordion-collapse collapse" data-bs-parent="#apiDetails">
+                        <div class="accordion-body p-2">
+                            <pre class="small border rounded p-2" style="white-space: pre-wrap; max-height: 300px; overflow-y: auto;">{{ transaction_pamf.response_body }}</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
             {% elif ecart.type_ecart == 'DOUBLON_PAMF' %}
             <p class="text-muted-debian mb-0">Plusieurs lignes PAMF trouvees pour cette transaction : voir le bloc "Choisir le posting PAMF de reference" ci-dessus.</p>
             {% else %}
