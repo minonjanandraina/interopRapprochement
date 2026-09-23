@@ -71,7 +71,13 @@
                     </span>
                 </td>
                 <td>{{ e.detecte_le }}</td>
-                <td><a href="{% url 'ecarts:detail' e.pk %}" class="btn btn-sm btn-outline-secondary">Details</a></td>
+                <td>
+                    {% if e.type_ecart == 'TRANSACTION_REJOUEE' %}
+                    <span class="btn btn-sm btn-outline-secondary disabled" title="Transaction rejouee - regularisee automatiquement">Details</span>
+                    {% else %}
+                    <a href="{% url 'ecarts:detail' e.pk %}" class="btn btn-sm btn-outline-secondary">Details</a>
+                    {% endif %}
+                </td>
             </tr>
             {% empty %}
             <tr><td colspan="{% if filtre_applique %}9{% else %}8{% endif %}" class="text-muted-debian">Aucun ecart.</td></tr>
