@@ -30,6 +30,23 @@ class FichierOMNonImporte(Exception):
     """Le fichier XLS Orange Money de la date demandee n'a pas encore ete importe."""
 
 
+def _obtenir_orphelines_om_anterieures(date_cible, transids):
+    """Retourne les transids qui sont des orphelines OM d'une date strictement anterieure."""
+    if not transids:
+        return set()
+
+    orphelines_anterieures = ResultatRapprochementOM.objects.filter(
+        rapprochement__date__lt=date_cible,
+        statut__in=[
+            ResultatRapprochementOM.Statut.ORPHELINE_OM,
+            ResultatRapprochementOM.Statut.TRANSACTION_REJOUEE,
+        ],
+        transid_om__in=transids,
+    ).values_list('transid_om', flat=True).distinct()
+
+    return set(orphelines_anterieures)
+
+
 def _purger_resultats_existants_om(rapprochement):
     """Supprime les pieces jointes physiques puis tous les ResultatRapprochementOM de la date.
 
@@ -98,7 +115,11 @@ def lancer_rapprochement_om(date_cible, user):
         pamf_groupes[t.transid_om].append(t)
     tous_ids = set(om_par_id) | set(pamf_groupes)
 
-    nb_success = nb_orph_om = nb_orph_pamf = nb_doublons_pamf = 0
+    # Detecter les orphelines PAMF qui correspondent a une orpheline OM d'une date anterieure
+    orphelines_pamf_ids = {transid for transid in tous_ids if not om_par_id.get(transid)}
+    orphelines_om_anterieures = _obtenir_orphelines_om_anterieures(date_cible, orphelines_pamf_ids)
+
+    nb_success = nb_orph_om = nb_orph_pamf = nb_doublons_pamf = nb_rejouees = 0
     a_creer = []
     for transid in tous_ids:
         om = om_par_id.get(transid)
@@ -127,8 +148,14 @@ def lancer_rapprochement_om(date_cible, user):
                 # Exclue completement du resultat (cf. CLAUDE.md, meme regle que MVOLA).
                 continue
             else:
-                statut = ResultatRapprochementOM.Statut.ORPHELINE_PAMF
-                nb_orph_pamf += 1
+                # Orpheline PAMF : verifier si elle correspond a une orpheline OM d'une date
+                # anterieure (transaction rejouee).
+                if transid in orphelines_om_anterieures:
+                    statut = ResultatRapprochementOM.Statut.TRANSACTION_REJOUEE
+                    nb_rejouees += 1
+                else:
+                    statut = ResultatRapprochementOM.Statut.ORPHELINE_PAMF
+                    nb_orph_pamf += 1
 
         a_creer.append(ResultatRapprochementOM(
             rapprochement=rapprochement, transid_om=transid,
@@ -144,6 +171,7 @@ def lancer_rapprochement_om(date_cible, user):
     rapprochement.nb_orphelines_om = nb_orph_om
     rapprochement.nb_orphelines_pamf = nb_orph_pamf
     rapprochement.nb_doublons_pamf = nb_doublons_pamf
+    rapprochement.nb_transactions_rejouees = nb_rejouees
     rapprochement.statut = RapprochementOM.Statut.TERMINE
     rapprochement.save()
 

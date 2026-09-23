@@ -408,6 +408,44 @@ class LancerRapprochementTests(TestCase):
         self.assertEqual(resultat.action_recommandee, ResultatRapprochement.ActionRecommandee.TICKET_ASPEKT)
 
     @patch('transactions.services_pamf.fetch_transactions_pamf')
+    def test_detecete_transaction_rejouee_comme_orpheline_pamf_anterieure(self, mock_fetch):
+        """Une orpheline PAMF qui correspond a une orpheline MVOLA d'une date anterieure est
+        marquee comme TRANSACTION_REJOUEE, et le compteur est incremente."""
+        from ecarts.models import Ecart
+
+        # Premier rapprochement : orpheline MVOLA le 07/09
+        fichier1 = make_csv('2026-09-07_reporting_PAMF.csv', [make_row(transid='REJOUEE')])
+        importer_fichier_mvola(fichier1, self.user)
+        mock_fetch.return_value = []
+
+        rapprochement_1 = lancer_rapprochement(self.date_cible, self.user)
+        self.assertEqual(rapprochement_1.nb_orphelines_mvola, 1)
+        self.assertEqual(rapprochement_1.nb_transactions_rejouees, 0)
+
+        resultat_1 = rapprochement_1.resultats.get(transid_mvola='REJOUEE')
+        self.assertEqual(resultat_1.statut, ResultatRapprochement.Statut.ORPHELINE_MVOLA)
+
+        # Deuxieme rapprochement : la meme transaction rejoueee apparait cote PAMF le 08/09
+        date_cible_2 = date(2026, 9, 8)
+        self.mock_derniere_activite.return_value = journee_cbs_terminee(date_cible_2)
+        fichier2 = make_csv('2026-09-08_reporting_PAMF.csv', [make_row(transid='REJOUEE', date_trans='08/09/2026 12:00:00')])
+        importer_fichier_mvola(fichier2, self.user)
+        mock_fetch.return_value = [
+            {'rAutotransactionID': 1, 'postingDate': date_cible_2, 'Time': '12:00:00',
+             'Note': '', 'TRANSID_MVOLA': 'REJOUEE', 'responseBody': '', 'is_sucess': 1},
+        ]
+
+        rapprochement_2 = lancer_rapprochement(date_cible_2, self.user)
+        self.assertEqual(rapprochement_2.nb_transactions_rejouees, 1)
+        self.assertEqual(rapprochement_2.nb_orphelines_pamf, 0)
+
+        resultat_2 = rapprochement_2.resultats.get(transid_mvola='REJOUEE')
+        self.assertEqual(resultat_2.statut, ResultatRapprochement.Statut.TRANSACTION_REJOUEE)
+
+        # Un ecart est genere pour la transaction rejouee
+        self.assertTrue(Ecart.objects.filter(transid_mvola='REJOUEE', date_transaction=date_cible_2).exists())
+
+    @patch('transactions.services_pamf.fetch_transactions_pamf')
     def test_echec_cbs_marque_le_rapprochement_en_echec(self, mock_fetch):
         fichier = make_csv('2026-09-07_reporting_PAMF.csv', [make_row(transid='111')])
         importer_fichier_mvola(fichier, self.user)

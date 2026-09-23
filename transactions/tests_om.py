@@ -367,6 +367,45 @@ class LancerRapprochementOMTests(TestCase):
         self.assertNotEqual(ecart_id_avant, ecart_apres.pk)
         self.assertEqual(EcartOM.objects.filter(transid_om='111').count(), 1)
 
+    @patch('transactions.services_pamf_om.fetch_transactions_pamf_om')
+    def test_detecete_transaction_rejouee_comme_orpheline_pamf_anterieure(self, mock_fetch):
+        """Une orpheline PAMF qui correspond a une orpheline OM d'une date anterieure est
+        marquee comme TRANSACTION_REJOUEE, et le compteur est incremente."""
+        from ecarts.models import EcartOM
+
+        # Premier rapprochement : orpheline OM le 07/09
+        import_obj_1 = make_import_om(self.user, date_fichier=self.date_cible)
+        make_transaction_om(import_obj_1, 'REJOUEE')
+        mock_fetch.return_value = []
+
+        rapprochement_1 = lancer_rapprochement_om(self.date_cible, self.user)
+        self.assertEqual(rapprochement_1.nb_orphelines_om, 1)
+        self.assertEqual(rapprochement_1.nb_transactions_rejouees, 0)
+
+        resultat_1 = rapprochement_1.resultats.get(transid_om='REJOUEE')
+        self.assertEqual(resultat_1.statut, ResultatRapprochementOM.Statut.ORPHELINE_OM)
+
+        # Deuxieme rapprochement : la meme transaction rejouee (pas reimportee cote OM, juste
+        # absent du fichier OM du 08/09) apparait cote PAMF le 08/09 - statut TRANSACTION_REJOUEE
+        date_cible_2 = date(2026, 9, 8)
+        self.mock_derniere_activite.return_value = journee_cbs_terminee(date_cible_2)
+        import_obj_2 = make_import_om(self.user, date_fichier=date_cible_2)
+        make_transaction_om(import_obj_2, 'AUTRE')  # Une autre transaction OM pour cette date
+        mock_fetch.return_value = [
+            {'rAutotransactionID': 1, 'postingDate': date_cible_2, 'Time': '12:00:00',
+             'Note': '', 'TRANSID_ORANGE_MONEY': 'REJOUEE', 'responseBody': '', 'is_sucess': 1},
+        ]
+
+        rapprochement_2 = lancer_rapprochement_om(date_cible_2, self.user)
+        self.assertEqual(rapprochement_2.nb_transactions_rejouees, 1)
+        self.assertEqual(rapprochement_2.nb_orphelines_pamf, 0)
+
+        resultat_2 = rapprochement_2.resultats.get(transid_om='REJOUEE')
+        self.assertEqual(resultat_2.statut, ResultatRapprochementOM.Statut.TRANSACTION_REJOUEE)
+
+        # Un ecart est genere pour la transaction rejouee
+        self.assertTrue(EcartOM.objects.filter(transid_om='REJOUEE', date_transaction=date_cible_2).exists())
+
 
 class NotificationNouveauxEcartsOMTests(TestCase):
     def setUp(self):

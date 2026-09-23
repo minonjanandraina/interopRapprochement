@@ -81,6 +81,23 @@ def _purger_resultats_existants(rapprochement):
     rapprochement.resultats.all().delete()
 
 
+def _obtenir_orphelines_mvola_anterieures(date_cible, transids):
+    """Retourne les transids qui sont des orphelines MVOLA d'une date strictement anterieure."""
+    if not transids:
+        return set()
+
+    orphelines_anterieures = ResultatRapprochement.objects.filter(
+        rapprochement__date__lt=date_cible,
+        statut__in=[
+            ResultatRapprochement.Statut.ORPHELINE_MVOLA,
+            ResultatRapprochement.Statut.TRANSACTION_REJOUEE,
+        ],
+        transid_mvola__in=transids,
+    ).values_list('transid_mvola', flat=True).distinct()
+
+    return set(orphelines_anterieures)
+
+
 def _generer_ecarts(rapprochement):
     from ecarts.models import Ecart
 
@@ -135,7 +152,11 @@ def lancer_rapprochement(date_cible, user):
         pamf_groupes[t.transid_mvola].append(t)
     tous_ids = set(mvola_par_id) | set(pamf_groupes)
 
-    nb_success = nb_orph_mvola = nb_orph_pamf = nb_doublons_pamf = 0
+    # Detecter les orphelines PAMF qui correspondent a une orpheline MVOLA d'une date anterieure
+    orphelines_pamf_ids = {transid for transid in tous_ids if not mvola_par_id.get(transid)}
+    orphelines_mvola_anterieures = _obtenir_orphelines_mvola_anterieures(date_cible, orphelines_pamf_ids)
+
+    nb_success = nb_orph_mvola = nb_orph_pamf = nb_doublons_pamf = nb_rejouees = 0
     a_creer = []
     for transid in tous_ids:
         mvola = mvola_par_id.get(transid)
@@ -167,8 +188,14 @@ def lancer_rapprochement(date_cible, user):
                 # ResultatRapprochement, pas d'Ecart), cf. CLAUDE.md, decision du 2026-09-14.
                 continue
             else:
-                statut = ResultatRapprochement.Statut.ORPHELINE_PAMF
-                nb_orph_pamf += 1
+                # Orpheline PAMF : verifier si elle correspond a une orpheline MVOLA d'une date
+                # anterieure (transaction rejouee).
+                if transid in orphelines_mvola_anterieures:
+                    statut = ResultatRapprochement.Statut.TRANSACTION_REJOUEE
+                    nb_rejouees += 1
+                else:
+                    statut = ResultatRapprochement.Statut.ORPHELINE_PAMF
+                    nb_orph_pamf += 1
 
         a_creer.append(ResultatRapprochement(
             rapprochement=rapprochement, transid_mvola=transid,
@@ -185,6 +212,7 @@ def lancer_rapprochement(date_cible, user):
     rapprochement.nb_orphelines_mvola = nb_orph_mvola
     rapprochement.nb_orphelines_pamf = nb_orph_pamf
     rapprochement.nb_doublons_pamf = nb_doublons_pamf
+    rapprochement.nb_transactions_rejouees = nb_rejouees
     rapprochement.statut = Rapprochement.Statut.TERMINE
     rapprochement.save()
 

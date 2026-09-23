@@ -145,6 +145,9 @@ class Rapprochement(models.Model):
     nb_doublons_pamf = models.PositiveIntegerField(
         default=0, help_text="Transactions avec plusieurs postings PAMF, a resoudre manuellement.",
     )
+    nb_transactions_rejouees = models.PositiveIntegerField(
+        default=0, help_text="Orphelines PAMF qui correspondent a une orpheline MVOLA d'une date anterieure.",
+    )
     message_erreur = models.TextField(blank=True)
 
     class Meta:
@@ -162,6 +165,7 @@ class ResultatRapprochement(models.Model):
         ORPHELINE_MVOLA = 'ORPHELINE_MVOLA', 'Orpheline MVOLA'
         ORPHELINE_PAMF = 'ORPHELINE_PAMF', 'Orpheline PAMF'
         DOUBLON_PAMF = 'DOUBLON_PAMF', 'Doublon PAMF (postings multiples)'
+        TRANSACTION_REJOUEE = 'TRANSACTION_REJOUEE', 'Transaction rejouee'
 
     class ActionRecommandee(models.TextChoices):
         ROLLBACK_MVOLA = 'ROLLBACK_MVOLA', 'Rollback cote MVOLA'
@@ -370,6 +374,9 @@ class RapprochementOM(models.Model):
     nb_doublons_pamf = models.PositiveIntegerField(
         default=0, help_text="Transactions avec plusieurs postings PAMF, a resoudre manuellement.",
     )
+    nb_transactions_rejouees = models.PositiveIntegerField(
+        default=0, help_text="Orphelines PAMF qui correspondent a une orpheline OM d'une date anterieure.",
+    )
     message_erreur = models.TextField(blank=True)
 
     class Meta:
@@ -387,6 +394,7 @@ class ResultatRapprochementOM(models.Model):
         ORPHELINE_OM = 'ORPHELINE_OM', 'Orpheline Orange Money'
         ORPHELINE_PAMF = 'ORPHELINE_PAMF', 'Orpheline PAMF'
         DOUBLON_PAMF = 'DOUBLON_PAMF', 'Doublon PAMF (postings multiples)'
+        TRANSACTION_REJOUEE = 'TRANSACTION_REJOUEE', 'Transaction rejouee'
 
     class ActionRecommandee(models.TextChoices):
         ROLLBACK_OM = 'ROLLBACK_OM', 'Rollback cote Orange Money'
